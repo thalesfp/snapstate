@@ -237,18 +237,18 @@ describe("array methods", () => {
     it("returns a new object each call so mutations do not affect store", async () => {
       const store = new TestStore({ nums: [], items: [], label: "" });
       const s1 = store.getStatus("load");
-      s1.status = "loading";
+      (s1 as any).status = "loading";
       const s2 = store.getStatus("load");
-      expect(s2.status).toBe("idle");
+      expect(s2.status.isIdle).toBe(true);
     });
 
     it("does not leak internal reference after fetch", async () => {
       const store = new TestStore({ nums: [], items: [], label: "" });
       await store.doFetch("load", async () => {});
       const s1 = store.getStatus("load");
-      s1.status = "error";
+      (s1 as any).status = "error";
       const s2 = store.getStatus("load");
-      expect(s2.status).toBe("ready");
+      expect(s2.status.isReady).toBe(true);
     });
   });
 });

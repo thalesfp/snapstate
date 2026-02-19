@@ -8,6 +8,7 @@ import {
   forwardRef,
 } from "react";
 import { SnapStore } from "../core/base.js";
+import { asyncStatus } from "../core/types.js";
 import type { StoreOptions, AsyncStatus, DotPaths, GetByPath } from "../core/types.js";
 
 interface ConnectConfig<S, MappedProps> {
@@ -108,7 +109,7 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       const [asyncState, setAsyncState] = useState<{
         status: AsyncStatus;
         error: string | null;
-      }>({ status: "idle", error: null });
+      }>({ status: asyncStatus("idle"), error: null });
 
       const fetchGenRef = useRef(0);
 
@@ -116,7 +117,7 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
         if (!fetchFn) { return; }
         let cancelled = false;
         const gen = ++fetchGenRef.current;
-        setAsyncState({ status: "loading", error: null });
+        setAsyncState({ status: asyncStatus("loading"), error: null });
         Promise.resolve()
           .then(() => {
             if (cancelled) { return; }
@@ -124,13 +125,13 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
           })
           .then(() => {
             if (gen === fetchGenRef.current) {
-              setAsyncState({ status: "ready", error: null });
+              setAsyncState({ status: asyncStatus("ready"), error: null });
             }
           })
           .catch((e) => {
             if (gen === fetchGenRef.current) {
               setAsyncState({
-                status: "error",
+                status: asyncStatus("error"),
                 error: e instanceof Error ? e.message : "Unknown error",
               });
             }
@@ -139,10 +140,10 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       }, []);
 
       if (fetchFn) {
-        if (loadingComponent && (asyncState.status === "idle" || asyncState.status === "loading")) {
+        if (loadingComponent && (asyncState.status.isIdle || asyncState.status.isLoading)) {
           return createElement(loadingComponent);
         }
-        if (errorComponent && asyncState.status === "error") {
+        if (errorComponent && asyncState.status.isError) {
           return createElement(errorComponent, { error: asyncState.error! });
         }
       }

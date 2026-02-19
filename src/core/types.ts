@@ -1,4 +1,23 @@
-export type AsyncStatus = "idle" | "loading" | "ready" | "error";
+export type AsyncStatusValue = "idle" | "loading" | "ready" | "error";
+
+export interface AsyncStatus {
+  readonly value: AsyncStatusValue;
+  readonly isIdle: boolean;
+  readonly isLoading: boolean;
+  readonly isReady: boolean;
+  readonly isError: boolean;
+}
+
+const _statuses: Record<AsyncStatusValue, AsyncStatus> = {
+  idle: Object.freeze({ value: "idle", isIdle: true, isLoading: false, isReady: false, isError: false }),
+  loading: Object.freeze({ value: "loading", isIdle: false, isLoading: true, isReady: false, isError: false }),
+  ready: Object.freeze({ value: "ready", isIdle: false, isLoading: false, isReady: true, isError: false }),
+  error: Object.freeze({ value: "error", isIdle: false, isLoading: false, isReady: false, isError: true }),
+};
+
+export function asyncStatus(value: AsyncStatusValue): AsyncStatus {
+  return _statuses[value];
+}
 
 /** Async operation status and error. Tracks the lifecycle of an `api.fetch`/`api.get`/`api.post` call. */
 export interface OperationState {

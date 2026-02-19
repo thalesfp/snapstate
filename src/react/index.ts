@@ -1,7 +1,9 @@
 export { ReactSnapStore as SnapStore } from "./store.js";
 export { setHttpClient, setDefaultHeaders } from "../core/base.js";
+export { asyncStatus } from "../core/types.js";
 export type {
   AsyncStatus,
+  AsyncStatusValue,
   OperationState,
   HttpClient,
   HttpRequestInit,

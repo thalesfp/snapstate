@@ -203,11 +203,11 @@ describe("SnapStore async race condition", () => {
 
     resolveNew();
     await newFetch;
-    expect(store.getStatus("op").status).toBe("ready");
+    expect(store.getStatus("op").status.isReady).toBe(true);
 
     resolveOld();
     await oldFetch;
-    expect(store.getStatus("op").status).toBe("ready");
+    expect(store.getStatus("op").status.isReady).toBe(true);
   });
 
   it("newer fetch wins when older rejects after newer resolves", async () => {
@@ -220,10 +220,10 @@ describe("SnapStore async race condition", () => {
 
     resolveNew();
     await newFetch;
-    expect(store.getStatus("op").status).toBe("ready");
+    expect(store.getStatus("op").status.isReady).toBe(true);
 
     rejectOld(new Error("stale"));
     await oldFetch;
-    expect(store.getStatus("op").status).toBe("ready");
+    expect(store.getStatus("op").status.isReady).toBe(true);
   });
 });
