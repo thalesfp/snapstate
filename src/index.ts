@@ -1,6 +1,8 @@
 export { SnapStore, setHttpClient, setDefaultHeaders } from "./core/base.js";
+export { asyncStatus } from "./core/types.js";
 export type {
   AsyncStatus,
+  AsyncStatusValue,
   Subscribable,
   StoreOptions,
   Listener,

@@ -1,5 +1,6 @@
-export { SnapFormStore, getObjectSchema } from "./form.js";
+export { SnapFormStore, getObjectSchema, getBaseSchemaType } from "./form.js";
 export { setHttpClient, setDefaultHeaders } from "../core/base.js";
+export { asyncStatus } from "../core/types.js";
 export type {
   ValidationMode,
   FormConfig,
@@ -8,6 +9,7 @@ export type {
 } from "./form.js";
 export type {
   AsyncStatus,
+  AsyncStatusValue,
   OperationState,
   HttpClient,
   HttpRequestInit,

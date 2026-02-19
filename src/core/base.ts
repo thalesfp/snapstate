@@ -9,9 +9,10 @@ import type {
   ApiAccessor,
   ApiRequestOptions,
 } from "./types.js";
+import { asyncStatus } from "./types.js";
 import { createStore } from "./store.js";
 
-const IDLE_STATE: OperationState = { status: "idle", error: null };
+const IDLE_STATE: OperationState = { status: asyncStatus("idle"), error: null };
 
 const defaultHttpClient: HttpClient = {
   async request(url, init) {
@@ -72,16 +73,16 @@ export class SnapStore<T extends object, K extends string = string> {
     const doFetch = async (key: K, fn: () => Promise<void>): Promise<void> => {
       const gen = (generations.get(key) ?? 0) + 1;
       generations.set(key, gen);
-      operations.set(key, { status: "loading", error: null });
+      operations.set(key, { status: asyncStatus("loading"), error: null });
       store.notify();
       try {
         await fn();
         if (generations.get(key) !== gen) { return; }
-        operations.set(key, { status: "ready", error: null });
+        operations.set(key, { status: asyncStatus("ready"), error: null });
       } catch (e) {
         if (generations.get(key) !== gen) { return; }
         operations.set(key, {
-          status: "error",
+          status: asyncStatus("error"),
           error: e instanceof Error ? e.message : "Unknown error",
         });
         store.notify();

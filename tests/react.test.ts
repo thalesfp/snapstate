@@ -5,6 +5,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, act as actTL, screen } from "@testing-library/react";
 import { createElement, createRef, forwardRef, StrictMode } from "react";
 import { SnapStore } from "../src/react/index.js";
+import type { AsyncStatus } from "../src/react/index.js";
 
 interface TestState {
   count: number;
@@ -293,12 +294,12 @@ describe("connect", () => {
 
     const store = new SaveStore();
 
-    function Display({ value, status }: { value: string; status: string }) {
+    function Display({ value, status }: { value: string; status: AsyncStatus }) {
       return createElement(
         "div",
         null,
         createElement("span", { "data-testid": "value" }, value),
-        createElement("span", { "data-testid": "status" }, status),
+        createElement("span", { "data-testid": "status" }, status.value),
       );
     }
 
@@ -463,13 +464,13 @@ describe("connect with fetch", () => {
       error,
     }: {
       count: number;
-      status: string;
+      status: AsyncStatus;
       error: string | null;
     }) {
       return createElement(
         "div",
         null,
-        createElement("span", { "data-testid": "status" }, status),
+        createElement("span", { "data-testid": "status" }, status.value),
         createElement("span", { "data-testid": "error" }, error ?? ""),
         createElement("span", { "data-testid": "count" }, count),
       );
@@ -509,13 +510,13 @@ describe("connect with fetch", () => {
       error,
     }: {
       count: number;
-      status: string;
+      status: AsyncStatus;
       error: string | null;
     }) {
       return createElement(
         "div",
         null,
-        createElement("span", { "data-testid": "status" }, status),
+        createElement("span", { "data-testid": "status" }, status.value),
         createElement("span", { "data-testid": "error" }, error ?? ""),
       );
     }
@@ -539,8 +540,8 @@ describe("connect with fetch", () => {
     const store = new TestStore();
     let fetchCount = 0;
 
-    function Display({ status }: { count: number; status: string; error: string | null }) {
-      return createElement("span", { "data-testid": "status" }, status);
+    function Display({ status }: { count: number; status: AsyncStatus; error: string | null }) {
+      return createElement("span", { "data-testid": "status" }, status.value);
     }
 
     const Connected = store.connect(Display, {
@@ -633,13 +634,13 @@ describe("connect with fetch", () => {
       status,
     }: {
       count: number;
-      status: string;
+      status: AsyncStatus;
       error: string | null;
     }) {
       return createElement(
         "div",
         null,
-        createElement("span", { "data-testid": "status" }, status),
+        createElement("span", { "data-testid": "status" }, status.value),
         createElement("span", { "data-testid": "count" }, count),
       );
     }
@@ -674,8 +675,8 @@ describe("connect with fetch", () => {
     const store = new TestStore();
     const fetchSpy = vi.fn(async () => {});
 
-    function Display({ count, status }: { count: number; status: string; error: string | null }) {
-      return createElement("span", { "data-testid": "status" }, status);
+    function Display({ count, status }: { count: number; status: AsyncStatus; error: string | null }) {
+      return createElement("span", { "data-testid": "status" }, status.value);
     }
 
     const Connected = store.connect(Display, {
@@ -698,13 +699,13 @@ describe("connect with fetch", () => {
       status,
     }: {
       count: number;
-      status: string;
+      status: AsyncStatus;
       error: string | null;
     }) {
       return createElement(
         "div",
         null,
-        createElement("span", { "data-testid": "status" }, status),
+        createElement("span", { "data-testid": "status" }, status.value),
         createElement("span", { "data-testid": "count" }, count),
       );
     }
