@@ -40,7 +40,11 @@ export type ArrayPaths<T> = {
 }[keyof T & string];
 
 export type ObjectArrayPaths<T> = {
-  [K in keyof T & string]: T[K] extends (infer V)[] ? (V extends object ? K : never) : never;
+  [K in keyof T & string]: T[K] extends (infer V)[]
+    ? V extends Date | RegExp | Map<any, any> | Set<any> | Function | any[]
+      ? never
+      : V extends Record<string, any> ? K : never
+    : never;
 }[keyof T & string];
 
 export type ElementOf<A> = A extends (infer V)[] ? V : never;
