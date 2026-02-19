@@ -234,12 +234,88 @@ class TodoStore extends SnapStore<TodoState, TodoOp> {
 }
 ```
 
+## Form stores
+
+`SnapFormStore` extends `ReactSnapStore` with Zod schema validation, per-field errors, dirty tracking, and a submit lifecycle. Available from `snapstate/form`.
+
+> Requires `zod` as a peer dependency.
+
+```ts
+import { SnapFormStore } from "snapstate/form";
+import { z } from "zod";
+
+const schema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+type LoginValues = z.infer<typeof schema>;
+
+class LoginStore extends SnapFormStore<LoginValues, "login"> {
+  constructor() {
+    super(schema, { email: "", password: "" }, { validationMode: "onBlur" });
+  }
+
+  login() {
+    return this.submit("login", async (values) => {
+      await this.api.post("login", "/api/login", { body: values });
+    });
+  }
+}
+
+const loginStore = new LoginStore();
+```
+
+```tsx
+function LoginFormInner({ values, errors, isDirty }: {
+  values: LoginValues;
+  errors: FormErrors<LoginValues>;
+  isDirty: boolean;
+}) {
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); loginStore.login(); }}>
+      <input
+        value={values.email}
+        onChange={(e) => loginStore.setValue("email", e.target.value)}
+        onBlur={() => loginStore.handleBlur("email")}
+      />
+      {errors.email && <span>{errors.email[0]}</span>}
+
+      <input
+        type="password"
+        value={values.password}
+        onChange={(e) => loginStore.setValue("password", e.target.value)}
+        onBlur={() => loginStore.handleBlur("password")}
+      />
+      {errors.password && <span>{errors.password[0]}</span>}
+
+      <button disabled={!isDirty}>Log in</button>
+    </form>
+  );
+}
+
+export const LoginForm = loginStore.connect(LoginFormInner, (s) => ({
+  values: s.values,
+  errors: s.errors,
+  isDirty: s.isDirty,
+}));
+```
+
+**Validation modes:**
+
+| Mode | Behavior |
+|---|---|
+| `onSubmit` | Validate only when `submit()` is called (default) |
+| `onBlur` | Validate a field when `handleBlur(field)` is called |
+| `onChange` | Validate a field on every `setValue(field, value)` call |
+
 ## Entry points
 
 | Import | Description |
 |---|---|
 | `snapstate` | Core `SnapStore`, types, `setHttpClient` |
 | `snapstate/react` | React-aware `ReactSnapStore` with `connect()` and `useSyncExternalStore` compatibility |
+| `snapstate/form` | Form-aware store with Zod validation, field-level errors, dirty tracking, and submit handling |
 
 ## API
 
@@ -302,6 +378,51 @@ Extends `SnapStore` with React integration. Available from `snapstate/react`.
 | `connect(Component, mapToProps)` | Wire a component to the store, injecting derived props. |
 | `connect(Component, config)` | Wire with async data fetching, loading, and error states. |
 | `connect(Component, { select })` | Wire with granular path-based subscriptions via `pick(path)`. |
+
+### `SnapFormStore<V, K>`
+
+Extends `ReactSnapStore` with form handling. Available from `snapstate/form`. `V` is the form values shape, `K` is the union of operation keys.
+
+Constructor: `new SnapFormStore(schema, initialValues, config?)`
+
+- `schema` — a Zod schema used for validation
+- `initialValues` — starting values for the form
+- `config.validationMode` — `"onSubmit"` (default), `"onBlur"`, or `"onChange"`
+
+**Public getters:**
+
+| Getter | Type | Description |
+|---|---|---|
+| `values` | `V` | Current form values |
+| `errors` | `FormErrors<V>` | Validation errors keyed by field (`{ [field]: string[] }`) |
+| `isDirty` | `boolean` | Whether any value differs from initial values |
+| `isValid` | `boolean` | Whether the form has no errors |
+
+**Public methods:**
+
+| Method | Description |
+|---|---|
+| `setValue(field, value)` | Set a field value. Triggers validation in `onChange` mode. |
+| `handleBlur(field)` | Call on field blur. Triggers validation in `onBlur` mode. |
+| `isFieldDirty(field)` | Check if a specific field differs from its initial value. |
+| `setError(field, message)` | Manually add an error message to a field. |
+| `clearErrors()` | Clear all validation errors. |
+| `validate()` | Validate the full form. Returns parsed data or `null`. |
+| `validateField(field)` | Validate a single field and update errors. |
+| `reset()` | Reset values to initial state and clear errors. |
+| `clear()` | Clear all values to type-appropriate zero-values and reset errors. |
+| `setInitialValues(values)` | Update initial values and sync current values. |
+| `submit(key, handler)` | Validate, then call `handler(values)` with tracked async status. Returns `undefined` if validation fails. |
+
+Inherits `connect()`, `subscribe()`, `getSnapshot()`, `getStatus()`, and `destroy()` from `ReactSnapStore`.
+
+**Types:**
+
+| Type | Description |
+|---|---|
+| `FormState<V>` | Internal state shape: `{ values, initial, errors, submitStatus }` |
+| `FormErrors<V>` | `{ [K in keyof V]?: string[] }` — field-level error messages |
+| `ValidationMode` | `"onSubmit" \| "onBlur" \| "onChange"` |
 
 ### `setHttpClient(client)`
 
