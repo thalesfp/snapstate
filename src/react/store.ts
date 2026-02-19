@@ -110,17 +110,32 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
         error: string | null;
       }>({ status: "idle", error: null });
 
+      const fetchGenRef = useRef(0);
+
       useEffect(() => {
-        if (!fetchFn || asyncState.status !== "idle") { return; }
+        if (!fetchFn) { return; }
+        let cancelled = false;
+        const gen = ++fetchGenRef.current;
         setAsyncState({ status: "loading", error: null });
-        fetchFn(store)
-          .then(() => setAsyncState({ status: "ready", error: null }))
-          .catch((e) =>
-            setAsyncState({
-              status: "error",
-              error: e instanceof Error ? e.message : "Unknown error",
-            }),
-          );
+        Promise.resolve()
+          .then(() => {
+            if (cancelled) { return; }
+            return fetchFn(store);
+          })
+          .then(() => {
+            if (gen === fetchGenRef.current) {
+              setAsyncState({ status: "ready", error: null });
+            }
+          })
+          .catch((e) => {
+            if (gen === fetchGenRef.current) {
+              setAsyncState({
+                status: "error",
+                error: e instanceof Error ? e.message : "Unknown error",
+              });
+            }
+          });
+        return () => { cancelled = true; };
       }, []);
 
       if (fetchFn) {

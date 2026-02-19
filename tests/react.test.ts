@@ -1,9 +1,9 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, act as actTL, screen } from "@testing-library/react";
-import { createElement, createRef, forwardRef } from "react";
+import { createElement, createRef, forwardRef, StrictMode } from "react";
 import { SnapStore } from "../src/react/index.js";
 
 interface TestState {
@@ -668,6 +668,70 @@ describe("connect with fetch", () => {
 
     expect(screen.getByTestId("status").textContent).toBe("ready");
     expect(screen.getByTestId("count").textContent).toBe("7");
+  });
+
+  it("calls fetch only once in StrictMode", async () => {
+    const store = new TestStore();
+    const fetchSpy = vi.fn(async () => {});
+
+    function Display({ count, status }: { count: number; status: string; error: string | null }) {
+      return createElement("span", { "data-testid": "status" }, status);
+    }
+
+    const Connected = store.connect(Display, {
+      props: (s) => ({ count: s.count }),
+      fetch: fetchSpy,
+    });
+
+    await actTL(async () => {
+      render(createElement(StrictMode, null, createElement(Connected)));
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves fetch in StrictMode without deadlock", async () => {
+    const store = new TestStore();
+
+    function Display({
+      count,
+      status,
+    }: {
+      count: number;
+      status: string;
+      error: string | null;
+    }) {
+      return createElement(
+        "div",
+        null,
+        createElement("span", { "data-testid": "status" }, status),
+        createElement("span", { "data-testid": "count" }, count),
+      );
+    }
+
+    let resolveFetch!: () => void;
+    const fetchPromise = new Promise<void>((r) => {
+      resolveFetch = r;
+    });
+
+    const Connected = store.connect(Display, {
+      props: (s) => ({ count: s.count }),
+      fetch: async (s) => {
+        await fetchPromise;
+        s.setCount(10);
+      },
+    });
+
+    render(createElement(StrictMode, null, createElement(Connected)));
+
+    expect(screen.getByTestId("status").textContent).toBe("loading");
+
+    await actTL(async () => {
+      resolveFetch();
+    });
+
+    expect(screen.getByTestId("status").textContent).toBe("ready");
+    expect(screen.getByTestId("count").textContent).toBe("10");
   });
 
   it("forwards ref to the wrapped component", () => {
