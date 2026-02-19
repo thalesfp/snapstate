@@ -133,9 +133,10 @@ export class SnapStore<T extends object, K extends string = string> {
           const arr = prev as any[];
           let changed = false;
           const result = arr.map((item: any) => {
+            if (item == null) { return item; }
             if (predicate(item)) {
               changed = true;
-              return { ...item, ...updates };
+              return Object.assign(Object.create(Object.getPrototypeOf(item)), item, updates);
             }
             return item;
           });

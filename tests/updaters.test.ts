@@ -119,6 +119,37 @@ describe("array methods", () => {
       store.doPatch("items", (t) => t.id === 99, { done: true });
       expect(store.snapshot().items).toEqual(items);
     });
+
+    it("skips null items without crashing", () => {
+      const items = [
+        { id: 1, name: "a", done: false },
+        null as any,
+        { id: 3, name: "c", done: false },
+      ];
+      const store = new TestStore({ nums: [], items, label: "" });
+      store.doPatch("items", (t) => t?.id === 3, { done: true });
+      const result = store.snapshot().items;
+      expect(result[0]).toEqual({ id: 1, name: "a", done: false });
+      expect(result[1]).toBeNull();
+      expect(result[2]).toEqual({ id: 3, name: "c", done: true });
+    });
+  });
+
+  describe("patch prototype preservation", () => {
+    it("preserves prototype chain on class instances", () => {
+      class Todo {
+        constructor(public id: number, public title: string, public done: boolean) {}
+        toggle() { return !this.done; }
+      }
+
+      const items = [new Todo(1, "a", false), new Todo(2, "b", false)];
+      const store = new TestStore({ nums: [], items: items as any, label: "" });
+      store.doPatch("items", (t: any) => t.id === 1, { done: true });
+      const patched = store.snapshot().items[0] as unknown as Todo;
+      expect(patched).toBeInstanceOf(Todo);
+      expect(patched.done).toBe(true);
+      expect(patched.toggle()).toBe(false);
+    });
   });
 
   describe("remove", () => {
