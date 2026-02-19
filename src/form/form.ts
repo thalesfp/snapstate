@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ReactSnapStore } from "../react/store.js";
+import { asyncStatus } from "../core/types.js";
 import type { OperationState } from "../core/types.js";
 
 export type ValidationMode = "onSubmit" | "onBlur" | "onChange";
@@ -26,6 +27,38 @@ export function getObjectSchema(
   return null;
 }
 
+const INNER_TYPE_WRAPPERS = new Set([
+  "optional", "nullable", "default", "prefault",
+  "catch", "nonoptional", "success", "readonly",
+]);
+
+export function getBaseSchemaType(schema: unknown): string | null {
+  if (
+    !schema ||
+    typeof schema !== "object" ||
+    !("_zod" in schema) ||
+    !(schema as any)._zod?.def?.type
+  ) {
+    return null;
+  }
+  const type: string = (schema as any)._zod.def.type;
+  if (INNER_TYPE_WRAPPERS.has(type)) {
+    return getBaseSchemaType((schema as any)._zod.def.innerType);
+  }
+  if (type === "pipe") {
+    return getBaseSchemaType((schema as any)._zod.def.in);
+  }
+  if (type === "literal") {
+    const vals = (schema as any)._zod.def.values;
+    if (Array.isArray(vals) && vals.length > 0) {
+      if (vals[0] === null) { return "null"; }
+      return typeof vals[0];
+    }
+    return "string";
+  }
+  return type;
+}
+
 export class SnapFormStore<
   V extends Record<string, unknown>,
   K extends string = string,
@@ -33,6 +66,7 @@ export class SnapFormStore<
   private schema: z.ZodTypeAny;
   private objectSchema: z.ZodObject<any> | null;
   private formConfig: FormConfig;
+  private _refs: Map<string, HTMLInputElement | HTMLSelectElement> = new Map();
 
   constructor(
     schema: z.ZodTypeAny,
@@ -43,7 +77,7 @@ export class SnapFormStore<
       values: { ...initialValues },
       initial: { ...initialValues },
       errors: {} as FormErrors<V>,
-      submitStatus: { status: "idle", error: null },
+      submitStatus: { status: asyncStatus("idle"), error: null },
     });
     this.schema = schema;
     this.objectSchema = getObjectSchema(schema);
@@ -63,8 +97,10 @@ export class SnapFormStore<
   get isDirty(): boolean {
     const values = this.state.get("values");
     const initial = this.state.get("initial");
-    for (const key of Object.keys(initial)) {
-      if (values[key] !== initial[key]) return true;
+    const shapeKeys = this.objectSchema ? Object.keys(this.objectSchema.shape) : [];
+    const allKeys = new Set([...Object.keys(initial), ...shapeKeys]);
+    for (const key of allKeys) {
+      if (values[key] !== initial[key]) { return true; }
     }
     return false;
   }
@@ -74,8 +110,53 @@ export class SnapFormStore<
     return Object.keys(errors).length === 0;
   }
 
+  register(field: keyof V & string): {
+    ref: (el: HTMLInputElement | HTMLSelectElement | null) => void;
+    name: string;
+    defaultValue?: string;
+    defaultChecked?: boolean;
+    onBlur: () => void;
+    onChange: () => void;
+  } {
+    const value = this.state.get(`values.${field}` as any);
+    const isBool = this.getFieldType(field) === "boolean";
+    return {
+      ref: (el: HTMLInputElement | HTMLSelectElement | null) => {
+        if (el) this._refs.set(field, el);
+        else this._refs.delete(field);
+      },
+      name: field,
+      defaultValue: isBool ? undefined! : String(value ?? ""),
+      ...(isBool ? { defaultChecked: Boolean(value) } : {}),
+      onBlur: () => {
+        this.syncRefToState(field);
+        this.handleBlur(field);
+      },
+      onChange: () => {
+        this.syncRefToState(field);
+        this.handleChange(field);
+      },
+    };
+  }
+
+  getValues(): V {
+    const stateValues = this.state.get("values");
+    const merged = { ...stateValues };
+    for (const [field, el] of this._refs) {
+      (merged as any)[field] = this.coerceRefValue(field, el);
+    }
+    return merged as V;
+  }
+
+  getValue(field: keyof V & string): V[typeof field] {
+    const el = this._refs.get(field);
+    if (el) return this.coerceRefValue(field, el) as V[typeof field];
+    return this.state.get(`values.${field}` as any);
+  }
+
   setValue<F extends keyof V & string>(field: F, value: V[F]): void {
     this.state.set(`values.${field}` as any, value);
+    this.syncValueToDom(field, value);
     this.handleChange(field);
   }
 
@@ -109,6 +190,7 @@ export class SnapFormStore<
   }
 
   validate(): V | null {
+    this.syncFromRefs();
     const result = this.schema.safeParse(this.state.get("values"));
     if (result.success) {
       this.clearErrors();
@@ -147,19 +229,31 @@ export class SnapFormStore<
     this.state.batch(() => {
       this.state.set("values", { ...initial });
       this.state.set("errors", {} as FormErrors<V>);
-      this.state.set("submitStatus", { status: "idle", error: null });
+      this.state.set("submitStatus", { status: asyncStatus("idle"), error: null });
     });
+    this.syncToDom();
   }
 
   clear(): void {
     const initial = this.state.get("initial");
-    const empty = Object.keys(initial).reduce(
+    const shapeKeys = this.objectSchema ? Object.keys(this.objectSchema.shape) : [];
+    const allKeys = new Set([...Object.keys(initial), ...shapeKeys]);
+    const empty = [...allKeys].reduce(
       (acc, key) => {
         const val = initial[key];
-        if (typeof val === "number") { (acc as any)[key] = 0; }
+        if (val === undefined || val === null) {
+          const ft = this.getFieldType(key);
+          if (ft === "number") { (acc as any)[key] = 0; }
+          else if (ft === "boolean") { (acc as any)[key] = false; }
+          else if (ft === "null") { (acc as any)[key] = null; }
+          else if (val === null && ft === "string") { (acc as any)[key] = ""; }
+          else if (val === null && ft === "array") { (acc as any)[key] = []; }
+          else if (val === null && (ft === "object" || ft === "record")) { (acc as any)[key] = {}; }
+          else { (acc as any)[key] = val; }
+        } else if (typeof val === "number") { (acc as any)[key] = 0; }
         else if (typeof val === "boolean") { (acc as any)[key] = false; }
-        else if (val === null) { (acc as any)[key] = null; }
         else if (Array.isArray(val)) { (acc as any)[key] = []; }
+        else if (typeof val === "object") { (acc as any)[key] = {}; }
         else { (acc as any)[key] = ""; }
         return acc;
       },
@@ -169,6 +263,7 @@ export class SnapFormStore<
       this.state.set("values", empty);
       this.state.set("errors", {} as FormErrors<V>);
     });
+    this.syncToDom();
   }
 
   setInitialValues(values: Partial<V>): void {
@@ -178,6 +273,58 @@ export class SnapFormStore<
       this.state.set("values", { ...merged });
       this.state.set("initial", merged);
     });
+    this.syncToDom();
+  }
+
+  private getFieldType(field: string): string {
+    const initial = this.state.get("initial");
+    const val = initial[field];
+    if (val !== undefined && val !== null) { return typeof val; }
+    if (this.objectSchema) {
+      const base = getBaseSchemaType(this.objectSchema.shape[field]);
+      if (base) { return base; }
+    }
+    return "string";
+  }
+
+  private coerceRefValue(field: string, el: HTMLInputElement | HTMLSelectElement): unknown {
+    const typ = this.getFieldType(field);
+    if (typ === "number") { return el.value === "" ? NaN : Number(el.value); }
+    if (typ === "boolean") { return (el as HTMLInputElement).checked; }
+    return el.value;
+  }
+
+  private syncRefToState(field: keyof V & string): void {
+    const el = this._refs.get(field);
+    if (!el) { return; }
+    this.state.set(`values.${field}` as any, this.coerceRefValue(field, el) as any);
+  }
+
+  private syncFromRefs(): void {
+    if (this._refs.size === 0) return;
+    this.state.batch(() => {
+      for (const [field, el] of this._refs) {
+        this.state.set(`values.${field}` as any, this.coerceRefValue(field, el) as any);
+      }
+    });
+  }
+
+  private syncValueToDom(field: string, value: unknown): void {
+    const el = this._refs.get(field);
+    if (!el) { return; }
+    if (this.getFieldType(field) === "boolean") {
+      (el as HTMLInputElement).checked = Boolean(value);
+    } else {
+      el.value = String(value ?? "");
+    }
+  }
+
+  private syncToDom(): void {
+    if (this._refs.size === 0) return;
+    const values = this.state.get("values");
+    for (const [field] of this._refs) {
+      this.syncValueToDom(field, (values as any)[field]);
+    }
   }
 
   submit(
@@ -206,7 +353,7 @@ export class SnapFormStore<
     const unsub = this.subscribe(() => {
       update();
       const s = this.getStatus(key).status;
-      if (s === "ready" || s === "error") unsub();
+      if (s.isReady || s.isError) unsub();
     });
   }
 }
