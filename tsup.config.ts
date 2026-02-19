@@ -15,4 +15,11 @@ export default defineConfig([
     sourcemap: true,
     external: ["react"],
   },
+  {
+    entry: { "form/index": "src/form/index.ts" },
+    format: ["esm", "cjs"],
+    dts: true,
+    sourcemap: true,
+    external: ["react", "zod"],
+  },
 ]);
