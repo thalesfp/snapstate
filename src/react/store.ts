@@ -14,8 +14,14 @@ import type { StoreOptions, AsyncStatus, DotPaths, GetByPath } from "../core/typ
 interface ConnectConfig<S, MappedProps> {
   props: (store: S) => MappedProps;
   fetch: (store: S) => Promise<void>;
+  cleanup?: (store: S) => void;
   loading?: React.ComponentType;
   error?: React.ComponentType<{ error: string }>;
+}
+
+interface ConnectPropsConfig<S, MappedProps> {
+  props: (store: S) => MappedProps;
+  cleanup?: (store: S) => void;
 }
 
 type PickFn<T extends object> = <P extends DotPaths<T>>(path: P) => GetByPath<T, P>;
@@ -49,6 +55,11 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
     Component: React.ComponentType<P>,
     config: ConnectConfig<this, MappedProps>,
   ): React.FC<Omit<P, keyof MappedProps | "status" | "error">>;
+  /** Wire a component to the store with props mapping and optional cleanup. */
+  connect<P extends object, MappedProps extends Record<string, unknown>>(
+    Component: React.ComponentType<P>,
+    config: ConnectPropsConfig<this, MappedProps>,
+  ): React.FC<Omit<P, keyof MappedProps>>;
   /** Wire a component to the store with granular path-based subscriptions via `select`.
    *  Paths are captured once at connect-time — select must use a stable set of paths.
    *  For conditional/dynamic path selection, use the `mapToProps` overload instead. */
@@ -60,6 +71,7 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
     Component: React.ComponentType<P>,
     configOrMapper:
       | ((store: this) => MappedProps)
+      | ConnectPropsConfig<this, MappedProps>
       | ConnectConfig<this, MappedProps>
       | SelectConnectConfig<T, MappedProps>,
   ): React.FC<Omit<P, keyof MappedProps>> {
@@ -69,14 +81,14 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       return this._connectWithSelect<P, MappedProps>(Component, configOrMapper.select);
     }
 
-    const mapToProps =
-      typeof configOrMapper === "function" ? configOrMapper : configOrMapper.props;
-    const fetchFn =
-      typeof configOrMapper === "function" ? undefined : configOrMapper.fetch;
-    const loadingComponent =
-      typeof configOrMapper === "function" ? undefined : configOrMapper.loading;
-    const errorComponent =
-      typeof configOrMapper === "function" ? undefined : configOrMapper.error;
+    const config = typeof configOrMapper === "function"
+      ? null
+      : configOrMapper as ConnectConfig<this, MappedProps>;
+    const mapToProps = config ? config.props : configOrMapper as (store: this) => MappedProps;
+    const fetchFn = config?.fetch;
+    const loadingComponent = config?.loading;
+    const errorComponent = config?.error;
+    const cleanupFn = config?.cleanup;
 
     const Connected = forwardRef<unknown, Omit<P, keyof MappedProps>>(function Connected(ownProps, ref) {
       const cachedRef = useRef<{ revision: number; props: MappedProps } | null>(null);
@@ -137,6 +149,20 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
             }
           });
         return () => { cancelled = true; };
+      }, []);
+
+      const cleanupCalledRef = useRef(false);
+      useEffect(() => {
+        cleanupCalledRef.current = false;
+        if (!cleanupFn) return;
+        return () => {
+          if (!cleanupCalledRef.current) {
+            cleanupCalledRef.current = true;
+            queueMicrotask(() => {
+              if (cleanupCalledRef.current) cleanupFn(store);
+            });
+          }
+        };
       }, []);
 
       if (fetchFn) {

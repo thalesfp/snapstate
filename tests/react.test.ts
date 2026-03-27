@@ -767,3 +767,114 @@ describe("connect with fetch", () => {
     expect(screen.getByTestId("keys").textContent).toBe("count");
   });
 });
+
+describe("connect cleanup", () => {
+  it("cleanup fires on unmount", async () => {
+    const store = new TestStore();
+    const cleanupSpy = vi.fn();
+
+    function Inner({ count }: { count: number }) {
+      return createElement("span", null, count);
+    }
+
+    const Connected = store.connect(Inner, {
+      props: (s) => ({ count: s.count }),
+      cleanup: cleanupSpy,
+    });
+
+    const { unmount } = render(createElement(Connected));
+    expect(cleanupSpy).not.toHaveBeenCalled();
+    unmount();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(cleanupSpy).toHaveBeenCalledOnce();
+  });
+
+  it("cleanup receives the store instance", async () => {
+    const store = new TestStore();
+    let receivedStore: unknown;
+
+    function Inner({ count }: { count: number }) {
+      return createElement("span", null, count);
+    }
+
+    const Connected = store.connect(Inner, {
+      props: (s) => ({ count: s.count }),
+      cleanup: (s) => { receivedStore = s; },
+    });
+
+    const { unmount } = render(createElement(Connected));
+    unmount();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(receivedStore).toBe(store);
+  });
+
+  it("cleanup works alongside fetch", async () => {
+    const store = new TestStore();
+    const cleanupSpy = vi.fn();
+    const fetchSpy = vi.fn().mockResolvedValue(undefined);
+
+    function Inner({ count }: { count: number }) {
+      return createElement("span", null, count);
+    }
+
+    const Connected = store.connect(Inner, {
+      props: (s) => ({ count: s.count }),
+      fetch: fetchSpy,
+      cleanup: cleanupSpy,
+    });
+
+    const { unmount } = render(createElement(Connected));
+    await actTL(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(cleanupSpy).not.toHaveBeenCalled();
+    unmount();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(cleanupSpy).toHaveBeenCalledOnce();
+  });
+
+  it("config without cleanup still works", async () => {
+    const store = new TestStore();
+    const fetchSpy = vi.fn().mockResolvedValue(undefined);
+
+    function Inner({ count }: { count: number }) {
+      return createElement("span", null, count);
+    }
+
+    const Connected = store.connect(Inner, {
+      props: (s) => ({ count: s.count }),
+      fetch: fetchSpy,
+    });
+
+    const { unmount } = render(createElement(Connected));
+    await actTL(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    unmount();
+  });
+
+  it("cleanup fires only once in StrictMode", async () => {
+    const store = new TestStore();
+    const cleanupSpy = vi.fn();
+
+    function Inner({ count }: { count: number }) {
+      return createElement("span", null, count);
+    }
+
+    const Connected = store.connect(Inner, {
+      props: (s) => ({ count: s.count }),
+      cleanup: cleanupSpy,
+    });
+
+    const { unmount } = render(
+      createElement(StrictMode, null, createElement(Connected)),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(cleanupSpy).not.toHaveBeenCalled();
+    unmount();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(cleanupSpy).toHaveBeenCalledOnce();
+  });
+});
