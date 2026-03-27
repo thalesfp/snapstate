@@ -64,6 +64,33 @@ npm run example:test:e2e       # Run Playwright e2e tests
 
 The example resolves `snapstate`, `snapstate/react`, and `snapstate/form` via Vite aliases and tsconfig paths pointing to `../dist/`. Always rebuild the library (`npm run build`) after changing library source.
 
+## Releasing
+
+```bash
+# 1. Ensure tests pass and build works
+npm test
+npm run build
+
+# 2. Bump version in package.json
+# Edit "version" field (e.g. "0.2.0" -> "0.3.0")
+
+# 3. Commit and tag
+git add package.json
+git commit -m "bump version to X.Y.Z"
+git tag vX.Y.Z
+
+# 4. Push commits and tags
+git push && git push --tags
+
+# 5. Create GitHub release
+gh release create vX.Y.Z --title "vX.Y.Z" --notes "release notes here"
+
+# 6. Publish to npm
+npm publish --access=public
+```
+
+The package is scoped as `@thalesfp/snapstate` and requires `--access=public` for npm publish. The `prepublishOnly` script automatically runs `npm run build && npm test` before publishing.
+
 ## Testing
 
 Vitest with jsdom environment. Tests use `vi.fn()` for spies, `@testing-library/react` + `act()` for React tests. Globals enabled (no need to import `describe`/`it`/`expect`).
