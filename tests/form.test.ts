@@ -1456,4 +1456,156 @@ describe("SnapFormStore", () => {
       expect(el.value).toBe("14:30");
     });
   });
+
+  describe("select multiple support", () => {
+    const multiSchema = z.object({ tags: z.array(z.string()) });
+    type MultiValues = z.infer<typeof multiSchema>;
+
+    function createMultiSelect(f: SnapFormStore<MultiValues>, options: string[]) {
+      const reg = f.register("tags");
+      const el = document.createElement("select");
+      el.multiple = true;
+      for (const v of options) {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        el.appendChild(opt);
+      }
+      reg.ref(el);
+      return { reg, el };
+    }
+
+    it("getValue reads selected options as array", () => {
+      const f = new SnapFormStore<MultiValues>(multiSchema, { tags: [] });
+      const { el } = createMultiSelect(f, ["a", "b", "c"]);
+      (el.options[0] as HTMLOptionElement).selected = true;
+      (el.options[2] as HTMLOptionElement).selected = true;
+      expect(f.getValue("tags")).toEqual(["a", "c"]);
+    });
+
+    it("getValue returns empty array when nothing selected", () => {
+      const f = new SnapFormStore<MultiValues>(multiSchema, { tags: [] });
+      createMultiSelect(f, ["a", "b", "c"]);
+      expect(f.getValue("tags")).toEqual([]);
+    });
+
+    it("setValue updates selected options", () => {
+      const f = new SnapFormStore<MultiValues>(multiSchema, { tags: [] });
+      const { el } = createMultiSelect(f, ["a", "b", "c"]);
+      f.setValue("tags", ["b", "c"]);
+      expect((el.options[0] as HTMLOptionElement).selected).toBe(false);
+      expect((el.options[1] as HTMLOptionElement).selected).toBe(true);
+      expect((el.options[2] as HTMLOptionElement).selected).toBe(true);
+    });
+
+    it("onBlur syncs selected options to state", () => {
+      const f = new SnapFormStore<MultiValues>(multiSchema, { tags: [] });
+      const { reg, el } = createMultiSelect(f, ["a", "b", "c"]);
+      (el.options[1] as HTMLOptionElement).selected = true;
+      reg.onBlur();
+      expect(f.values.tags).toEqual(["b"]);
+    });
+
+    it("getValues includes multi-select values", () => {
+      const f = new SnapFormStore<MultiValues>(multiSchema, { tags: [] });
+      const { el } = createMultiSelect(f, ["a", "b"]);
+      (el.options[0] as HTMLOptionElement).selected = true;
+      (el.options[1] as HTMLOptionElement).selected = true;
+      expect(f.getValues()).toEqual({ tags: ["a", "b"] });
+    });
+
+    it("validate includes multi-select values", () => {
+      const f = new SnapFormStore<MultiValues>(multiSchema, { tags: [] });
+      const { el } = createMultiSelect(f, ["a", "b"]);
+      (el.options[0] as HTMLOptionElement).selected = true;
+      const data = f.validate();
+      expect(data).toEqual({ tags: ["a"] });
+    });
+
+    it("reset restores initial selection", () => {
+      const f = new SnapFormStore<MultiValues>(multiSchema, { tags: ["b"] });
+      const { el } = createMultiSelect(f, ["a", "b", "c"]);
+      f.setValue("tags", ["a", "c"]);
+      f.reset();
+      expect((el.options[0] as HTMLOptionElement).selected).toBe(false);
+      expect((el.options[1] as HTMLOptionElement).selected).toBe(true);
+      expect((el.options[2] as HTMLOptionElement).selected).toBe(false);
+    });
+
+    it("clear empties the selection", () => {
+      const f = new SnapFormStore<MultiValues>(multiSchema, { tags: ["a"] });
+      const { el } = createMultiSelect(f, ["a", "b"]);
+      f.clear();
+      expect((el.options[0] as HTMLOptionElement).selected).toBe(false);
+      expect((el.options[1] as HTMLOptionElement).selected).toBe(false);
+      expect(f.values.tags).toEqual([]);
+    });
+
+    it("isDirty returns false after unchanged multi-select round-trip", () => {
+      const f = new SnapFormStore<MultiValues>(multiSchema, { tags: ["a", "b"] });
+      const { reg, el } = createMultiSelect(f, ["a", "b", "c"]);
+      (el.options[0] as HTMLOptionElement).selected = true;
+      (el.options[1] as HTMLOptionElement).selected = true;
+      reg.onBlur();
+      expect(f.isDirty).toBe(false);
+    });
+
+    it("register omits defaultValue for array fields", () => {
+      const f = new SnapFormStore<MultiValues>(multiSchema, { tags: ["a", "b"] });
+      const reg = f.register("tags");
+      expect(reg.defaultValue).toBeUndefined();
+    });
+
+    it("initial values are synced to DOM on mount", () => {
+      const f = new SnapFormStore<MultiValues>(multiSchema, { tags: ["a", "c"] });
+      const { el } = createMultiSelect(f, ["a", "b", "c"]);
+      expect((el.options[0] as HTMLOptionElement).selected).toBe(true);
+      expect((el.options[1] as HTMLOptionElement).selected).toBe(false);
+      expect((el.options[2] as HTMLOptionElement).selected).toBe(true);
+    });
+
+    it("untouched form preserves initial values through validate", () => {
+      const f = new SnapFormStore<MultiValues>(multiSchema, { tags: ["b"] });
+      const { el } = createMultiSelect(f, ["a", "b", "c"]);
+      const data = f.validate();
+      expect(data).toEqual({ tags: ["b"] });
+      expect((el.options[1] as HTMLOptionElement).selected).toBe(true);
+    });
+
+    it("coerces numeric array values", () => {
+      const numSchema = z.object({ ids: z.array(z.number()) });
+      type NumValues = z.infer<typeof numSchema>;
+      const f = new SnapFormStore<NumValues>(numSchema, { ids: [] });
+      const reg = f.register("ids");
+      const el = document.createElement("select");
+      el.multiple = true;
+      for (const v of ["1", "2", "3"]) {
+        const opt = document.createElement("option");
+        opt.value = v;
+        el.appendChild(opt);
+      }
+      reg.ref(el);
+      (el.options[0] as HTMLOptionElement).selected = true;
+      (el.options[2] as HTMLOptionElement).selected = true;
+      expect(f.getValue("ids")).toEqual([1, 3]);
+    });
+
+    it("coerces numeric array values from nullable schema", () => {
+      const nullableNumSchema = z.object({ ids: z.array(z.number()).nullable() });
+      type NullableNumValues = z.infer<typeof nullableNumSchema>;
+      const f = new SnapFormStore<NullableNumValues>(nullableNumSchema, { ids: null });
+      const reg = f.register("ids");
+      const el = document.createElement("select");
+      el.multiple = true;
+      for (const v of ["10", "20"]) {
+        const opt = document.createElement("option");
+        opt.value = v;
+        el.appendChild(opt);
+      }
+      reg.ref(el);
+      (el.options[0] as HTMLOptionElement).selected = true;
+      (el.options[1] as HTMLOptionElement).selected = true;
+      expect(f.getValue("ids")).toEqual([10, 20]);
+    });
+  });
 });
