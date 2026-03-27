@@ -404,6 +404,12 @@ export class SnapFormStore<
   }
 
   private coerceRefValue(field: string, el: FormElement): unknown {
+    if (el instanceof HTMLInputElement && el.type === "file") {
+      if (el.files && el.files.length > 0) {
+        return el.multiple ? Array.from(el.files) : el.files[0];
+      }
+      return this.state.get(`values.${field}` as any);
+    }
     const typ = this.getFieldType(field);
     if (typ === "boolean") { return (el as HTMLInputElement).checked; }
     if (typ === "array" && el instanceof HTMLSelectElement && el.multiple) {
@@ -454,6 +460,10 @@ export class SnapFormStore<
     }
     const el = this._refs.get(field);
     if (!el) { return; }
+    if (el instanceof HTMLInputElement && el.type === "file") {
+      if (value == null || (Array.isArray(value) && value.length === 0)) el.value = "";
+      return;
+    }
     const ft = this.getFieldType(field);
     if (ft === "boolean") {
       (el as HTMLInputElement).checked = Boolean(value);

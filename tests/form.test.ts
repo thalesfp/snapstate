@@ -1608,4 +1608,156 @@ describe("SnapFormStore", () => {
       expect(f.getValue("ids")).toEqual([10, 20]);
     });
   });
+
+  describe("file input support", () => {
+    const fileSchema = z.object({ doc: z.any() });
+    type FileValues = z.infer<typeof fileSchema>;
+
+    it("getValue returns single File from file input", () => {
+      const f = new SnapFormStore<FileValues>(fileSchema, { doc: null });
+      const reg = f.register("doc");
+      const el = document.createElement("input");
+      el.type = "file";
+      reg.ref(el);
+      const file = new File(["content"], "test.txt", { type: "text/plain" });
+      Object.defineProperty(el, "files", { value: [file], configurable: true });
+      expect(f.getValue("doc")).toBe(file);
+    });
+
+    it("getValue returns null when no file selected", () => {
+      const f = new SnapFormStore<FileValues>(fileSchema, { doc: null });
+      const reg = f.register("doc");
+      const el = document.createElement("input");
+      el.type = "file";
+      reg.ref(el);
+      expect(f.getValue("doc")).toBeNull();
+    });
+
+    it("getValue returns File array for multiple file input", () => {
+      const f = new SnapFormStore<FileValues>(fileSchema, { doc: null });
+      const reg = f.register("doc");
+      const el = document.createElement("input");
+      el.type = "file";
+      el.multiple = true;
+      reg.ref(el);
+      const f1 = new File(["a"], "a.txt");
+      const f2 = new File(["b"], "b.txt");
+      Object.defineProperty(el, "files", { value: [f1, f2], configurable: true });
+      expect(f.getValue("doc")).toEqual([f1, f2]);
+    });
+
+    it("onBlur syncs file to state", () => {
+      const f = new SnapFormStore<FileValues>(fileSchema, { doc: null });
+      const reg = f.register("doc");
+      const el = document.createElement("input");
+      el.type = "file";
+      reg.ref(el);
+      const file = new File(["content"], "test.txt");
+      Object.defineProperty(el, "files", { value: [file], configurable: true });
+      reg.onBlur();
+      expect(f.values.doc).toBe(file);
+    });
+
+    it("onChange syncs file to state", () => {
+      const f = new SnapFormStore<FileValues>(fileSchema, { doc: null }, {
+        validationMode: "onChange",
+      });
+      const reg = f.register("doc");
+      const el = document.createElement("input");
+      el.type = "file";
+      reg.ref(el);
+      const file = new File(["content"], "test.txt");
+      Object.defineProperty(el, "files", { value: [file], configurable: true });
+      reg.onChange();
+      expect(f.values.doc).toBe(file);
+    });
+
+    it("reset clears file input", () => {
+      const f = new SnapFormStore<FileValues>(fileSchema, { doc: null });
+      const reg = f.register("doc");
+      const el = document.createElement("input");
+      el.type = "file";
+      reg.ref(el);
+      const file = new File(["content"], "test.txt");
+      Object.defineProperty(el, "files", { value: [file], configurable: true });
+      reg.onBlur();
+      f.reset();
+      expect(el.value).toBe("");
+      expect(f.values.doc).toBeNull();
+    });
+
+    it("getValues includes file field", () => {
+      const mixedSchema = z.object({ name: z.string(), doc: z.any() });
+      type MixedValues = z.infer<typeof mixedSchema>;
+      const f = new SnapFormStore<MixedValues>(mixedSchema, { name: "", doc: null });
+      const nameReg = f.register("name");
+      const nameEl = document.createElement("input");
+      nameReg.ref(nameEl);
+      nameEl.value = "Alice";
+      const docReg = f.register("doc");
+      const docEl = document.createElement("input");
+      docEl.type = "file";
+      docReg.ref(docEl);
+      const file = new File(["x"], "x.txt");
+      Object.defineProperty(docEl, "files", { value: [file], configurable: true });
+      const vals = f.getValues();
+      expect(vals.name).toBe("Alice");
+      expect(vals.doc).toBe(file);
+    });
+
+    it("clear resets file field to null and clears DOM", () => {
+      const f = new SnapFormStore<FileValues>(fileSchema, { doc: null });
+      const reg = f.register("doc");
+      const el = document.createElement("input");
+      el.type = "file";
+      reg.ref(el);
+      const file = new File(["content"], "test.txt");
+      Object.defineProperty(el, "files", { value: [file], configurable: true });
+      reg.onBlur();
+      f.clear();
+      expect(f.values.doc).toBeNull();
+      expect(el.value).toBe("");
+    });
+
+    it("preserves undefined for optional file field when no file selected", () => {
+      const optSchema = z.object({ doc: z.any().optional() });
+      type OptValues = z.infer<typeof optSchema>;
+      const f = new SnapFormStore<OptValues>(optSchema, { doc: undefined } as OptValues);
+      const reg = f.register("doc");
+      const el = document.createElement("input");
+      el.type = "file";
+      reg.ref(el);
+      expect(f.getValue("doc")).toBeUndefined();
+      reg.onBlur();
+      expect(f.values.doc).toBeUndefined();
+    });
+
+    it("preserves null for nullable file field when no file selected", () => {
+      const f = new SnapFormStore<FileValues>(fileSchema, { doc: null });
+      const reg = f.register("doc");
+      const el = document.createElement("input");
+      el.type = "file";
+      reg.ref(el);
+      expect(f.getValue("doc")).toBeNull();
+      reg.onBlur();
+      expect(f.values.doc).toBeNull();
+    });
+
+    it("reset clears multi-file input DOM", () => {
+      const multiFileSchema = z.object({ docs: z.any() });
+      type MultiFileValues = z.infer<typeof multiFileSchema>;
+      const f = new SnapFormStore<MultiFileValues>(multiFileSchema, { docs: [] });
+      const reg = f.register("docs");
+      const el = document.createElement("input");
+      el.type = "file";
+      el.multiple = true;
+      reg.ref(el);
+      const file = new File(["x"], "x.txt");
+      Object.defineProperty(el, "files", { value: [file], configurable: true });
+      reg.onBlur();
+      f.reset();
+      expect(el.value).toBe("");
+      expect(f.values.docs).toEqual([]);
+    });
+  });
 });

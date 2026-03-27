@@ -15,9 +15,4 @@
 | `<input type="radio">` | Multiple radios per field via `_radioRefs` map; reads checked element's value |
 | `<input type="date">` / `time` / `datetime-local` | Coerced to `Date` object when field type is `date`; formatted for DOM write |
 | `<select multiple>` | Reads `el.selectedOptions` as `string[]` when field type is `array`; sets `option.selected` on write |
-
-### To be implemented
-
-| Element | What's missing |
-|---|---|
-| `<input type="file">` | `el.value` gives a fake path; needs `el.files` to return a `FileList` |
+| `<input type="file">` | Reads `el.files`; returns single `File` or `File[]` for `multiple`; reset clears via `el.value = ""` |
