@@ -134,7 +134,7 @@ export class SnapFormStore<
             set.add(el);
           } else {
             this._refs.set(field, el);
-            if (value instanceof Date) {
+            if (value instanceof Date || Array.isArray(value)) {
               this.syncValueToDom(field, value);
             }
           }
@@ -155,6 +155,7 @@ export class SnapFormStore<
       name: field,
       ...(isBool
         ? { defaultChecked: Boolean(value) }
+        : Array.isArray(value) ? {}
         : { defaultValue: value instanceof Date ? this.formatLocalDateTime(value) : String(value ?? "") }),
       onBlur: () => {
         this.syncRefToState(field);
@@ -315,6 +316,9 @@ export class SnapFormStore<
   private valuesEqual(a: unknown, b: unknown): boolean {
     if (a === b) return true;
     if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+    if (Array.isArray(a) && Array.isArray(b)) {
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
     return false;
   }
 
@@ -322,10 +326,30 @@ export class SnapFormStore<
     const initial = this.state.get("initial");
     const val = initial[field];
     if (val instanceof Date) { return "date"; }
+    if (Array.isArray(val)) { return "array"; }
     if (val !== undefined && val !== null) { return typeof val; }
     if (this.objectSchema) {
       const base = getBaseSchemaType(this.objectSchema.shape[field]);
       if (base) { return base; }
+    }
+    return "string";
+  }
+
+  private getArrayItemType(field: string): string {
+    const initial = this.state.get("initial");
+    const val = initial[field];
+    if (Array.isArray(val) && val.length > 0) return typeof val[0];
+    if (this.objectSchema) {
+      let schema: any = this.objectSchema.shape[field];
+      while (schema?._zod?.def) {
+        if (schema._zod.def.type === "array") {
+          const itemType = getBaseSchemaType(schema._zod.def.element);
+          if (itemType) return itemType;
+          break;
+        }
+        schema = schema._zod.def.innerType ?? schema._zod.def.in;
+        if (!schema) break;
+      }
     }
     return "string";
   }
@@ -380,7 +404,14 @@ export class SnapFormStore<
   }
 
   private coerceRefValue(field: string, el: FormElement): unknown {
-    if (this.getFieldType(field) === "boolean") { return (el as HTMLInputElement).checked; }
+    const typ = this.getFieldType(field);
+    if (typ === "boolean") { return (el as HTMLInputElement).checked; }
+    if (typ === "array" && el instanceof HTMLSelectElement && el.multiple) {
+      const itemType = this.getArrayItemType(field);
+      return Array.from(el.selectedOptions, (o) =>
+        itemType === "number" ? (o.value === "" ? NaN : Number(o.value)) : o.value,
+      );
+    }
     return this.coerceStringValue(field, el.value);
   }
 
@@ -428,6 +459,11 @@ export class SnapFormStore<
       (el as HTMLInputElement).checked = Boolean(value);
     } else if (ft === "date" && value instanceof Date) {
       el.value = this.formatDateForInput(el as HTMLInputElement, value);
+    } else if (ft === "array" && el instanceof HTMLSelectElement && el.multiple && Array.isArray(value)) {
+      const vals = new Set(value.map(String));
+      for (let i = 0; i < el.options.length; i++) {
+        el.options[i].selected = vals.has(el.options[i].value);
+      }
     } else {
       el.value = String(value ?? "");
     }
