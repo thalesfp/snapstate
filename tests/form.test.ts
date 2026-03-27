@@ -1073,4 +1073,194 @@ describe("SnapFormStore", () => {
       expect(f.errors.volume).toBeDefined();
     });
   });
+
+  describe("radio button support", () => {
+    const radioSchema = z.object({ color: z.string() });
+    type RadioValues = z.infer<typeof radioSchema>;
+
+    function createRadioGroup(f: SnapFormStore<RadioValues>, values: string[]) {
+      return values.map((v) => {
+        const reg = f.register("color");
+        const el = document.createElement("input");
+        el.type = "radio";
+        el.value = v;
+        reg.ref(el);
+        return { reg, el };
+      });
+    }
+
+    it("getValue returns the checked radio value", () => {
+      const f = new SnapFormStore<RadioValues>(radioSchema, { color: "red" });
+      const radios = createRadioGroup(f, ["red", "green", "blue"]);
+      radios[1].el.checked = true;
+      expect(f.getValue("color")).toBe("green");
+    });
+
+    it("getValue returns undefined when no radio is checked", () => {
+      const f = new SnapFormStore<RadioValues>(radioSchema, { color: "red" });
+      createRadioGroup(f, ["red", "green", "blue"]);
+      expect(f.getValue("color")).toBeUndefined();
+    });
+
+    it("onChange syncs checked radio to state", () => {
+      const f = new SnapFormStore<RadioValues>(radioSchema, { color: "red" }, {
+        validationMode: "onChange",
+      });
+      const radios = createRadioGroup(f, ["red", "green", "blue"]);
+      radios[2].el.checked = true;
+      radios[2].reg.onChange();
+      expect(f.values.color).toBe("blue");
+    });
+
+    it("onBlur syncs checked radio to state", () => {
+      const f = new SnapFormStore<RadioValues>(radioSchema, { color: "red" });
+      const radios = createRadioGroup(f, ["red", "green", "blue"]);
+      radios[0].el.checked = true;
+      radios[0].reg.onBlur();
+      expect(f.values.color).toBe("red");
+    });
+
+    it("getValues includes radio field values", () => {
+      const mixedSchema = z.object({ name: z.string(), color: z.string() });
+      type MixedValues = z.infer<typeof mixedSchema>;
+      const f = new SnapFormStore<MixedValues>(mixedSchema, { name: "", color: "red" });
+      const nameReg = f.register("name");
+      const nameEl = document.createElement("input");
+      nameReg.ref(nameEl);
+      nameEl.value = "Alice";
+      const radios = ["red", "green"].map((v) => {
+        const reg = f.register("color");
+        const el = document.createElement("input");
+        el.type = "radio";
+        el.value = v;
+        reg.ref(el);
+        return el;
+      });
+      radios[1].checked = true;
+      expect(f.getValues()).toEqual({ name: "Alice", color: "green" });
+    });
+
+    it("setValue updates the correct radio checked state", () => {
+      const f = new SnapFormStore<RadioValues>(radioSchema, { color: "red" });
+      const radios = createRadioGroup(f, ["red", "green", "blue"]);
+      f.setValue("color", "blue");
+      expect(radios[0].el.checked).toBe(false);
+      expect(radios[1].el.checked).toBe(false);
+      expect(radios[2].el.checked).toBe(true);
+    });
+
+    it("reset restores initial radio selection", () => {
+      const f = new SnapFormStore<RadioValues>(radioSchema, { color: "red" });
+      const radios = createRadioGroup(f, ["red", "green", "blue"]);
+      f.setValue("color", "blue");
+      f.reset();
+      expect(radios[0].el.checked).toBe(true);
+      expect(radios[1].el.checked).toBe(false);
+      expect(radios[2].el.checked).toBe(false);
+    });
+
+    it("ref(null) removes only the specific radio element", () => {
+      const f = new SnapFormStore<RadioValues>(radioSchema, { color: "red" });
+      const radios = createRadioGroup(f, ["red", "green", "blue"]);
+      radios[0].reg.ref(null);
+      radios[1].el.checked = true;
+      expect(f.getValue("color")).toBe("green");
+    });
+
+    it("all radios unmounted falls back to state", () => {
+      const f = new SnapFormStore<RadioValues>(radioSchema, { color: "red" });
+      const radios = createRadioGroup(f, ["red", "green"]);
+      radios[0].reg.ref(null);
+      radios[1].reg.ref(null);
+      expect(f.getValue("color")).toBe("red");
+    });
+
+    it("validate includes radio value in parsed data", () => {
+      const f = new SnapFormStore<RadioValues>(radioSchema, { color: "" });
+      const radios = createRadioGroup(f, ["red", "green"]);
+      radios[0].el.checked = true;
+      const data = f.validate();
+      expect(data).toEqual({ color: "red" });
+    });
+
+    it("clear unchecks all radios", () => {
+      const f = new SnapFormStore<RadioValues>(radioSchema, { color: "red" });
+      const radios = createRadioGroup(f, ["red", "green", "blue"]);
+      radios[0].el.checked = true;
+      f.clear();
+      expect(radios[0].el.checked).toBe(false);
+      expect(radios[1].el.checked).toBe(false);
+      expect(radios[2].el.checked).toBe(false);
+    });
+
+    it("numeric radio values are coerced", () => {
+      const numSchema = z.object({ level: z.number() });
+      type NumValues = z.infer<typeof numSchema>;
+      const f = new SnapFormStore<NumValues>(numSchema, { level: 1 });
+      const radios = [1, 2, 3].map((v) => {
+        const reg = f.register("level");
+        const el = document.createElement("input");
+        el.type = "radio";
+        el.value = String(v);
+        reg.ref(el);
+        return { reg, el };
+      });
+      radios[2].el.checked = true;
+      expect(f.getValue("level")).toBe(3);
+    });
+
+    it("onChange validation fires for radio changes", () => {
+      const enumSchema = z.object({ color: z.enum(["red", "green"]) });
+      type EnumValues = z.infer<typeof enumSchema>;
+      const f = new SnapFormStore<EnumValues>(enumSchema, { color: "red" }, {
+        validationMode: "onChange",
+      });
+      const radios = ["red", "green", "blue"].map((v) => {
+        const reg = f.register("color");
+        const el = document.createElement("input");
+        el.type = "radio";
+        el.value = v;
+        reg.ref(el);
+        return { reg, el };
+      });
+      radios[2].el.checked = true;
+      radios[2].reg.onChange();
+      expect(f.errors.color).toBeDefined();
+    });
+
+    it("validate preserves state when no radio is checked", () => {
+      const f = new SnapFormStore<RadioValues>(radioSchema, { color: "red" });
+      createRadioGroup(f, ["red", "green", "blue"]);
+      const data = f.validate();
+      expect(data).toEqual({ color: "red" });
+    });
+
+    it("reusing one register() result across multiple radios works", () => {
+      const f = new SnapFormStore<RadioValues>(radioSchema, { color: "red" });
+      const reg = f.register("color");
+      const els = ["red", "green", "blue"].map((v) => {
+        const el = document.createElement("input");
+        el.type = "radio";
+        el.value = v;
+        reg.ref(el);
+        return el;
+      });
+      els[1].checked = true;
+      expect(f.getValue("color")).toBe("green");
+    });
+
+    it("reused register() ref(null) cleans up all tracked radios", () => {
+      const f = new SnapFormStore<RadioValues>(radioSchema, { color: "red" });
+      const reg = f.register("color");
+      const els = ["red", "green"].map((v) => {
+        const el = document.createElement("input");
+        el.type = "radio";
+        el.value = v;
+        reg.ref(el);
+        return el;
+      });
+      reg.ref(null);
+      expect(f.getValue("color")).toBe("red");
+    });
+  });
 });
