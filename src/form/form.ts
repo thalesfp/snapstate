@@ -69,6 +69,7 @@ export class SnapFormStore<
   private objectSchema: z.ZodObject<any> | null;
   private formConfig: FormConfig;
   private _refs: Map<string, FormElement> = new Map();
+  private _radioRefs: Map<string, Set<FormElement>> = new Map();
 
   constructor(
     schema: z.ZodTypeAny,
@@ -122,10 +123,31 @@ export class SnapFormStore<
   } {
     const value = this.state.get(`values.${field}` as any);
     const isBool = this.getFieldType(field) === "boolean";
+    const trackedEls = new Set<FormElement>();
     return {
       ref: (el: FormElement | null) => {
-        if (el) this._refs.set(field, el);
-        else this._refs.delete(field);
+        if (el) {
+          if ((el as HTMLInputElement).type === "radio") {
+            if (!this._radioRefs.has(field)) this._refs.delete(field);
+            let set = this._radioRefs.get(field);
+            if (!set) { set = new Set(); this._radioRefs.set(field, set); }
+            set.add(el);
+          } else {
+            this._refs.set(field, el);
+          }
+          trackedEls.add(el);
+        } else {
+          for (const tracked of trackedEls) {
+            const set = this._radioRefs.get(field);
+            if (set) {
+              set.delete(tracked);
+              if (set.size === 0) this._radioRefs.delete(field);
+            } else {
+              this._refs.delete(field);
+            }
+          }
+          trackedEls.clear();
+        }
       },
       name: field,
       ...(isBool
@@ -148,10 +170,16 @@ export class SnapFormStore<
     for (const [field, el] of this._refs) {
       (merged as any)[field] = this.coerceRefValue(field, el);
     }
+    for (const [field] of this._radioRefs) {
+      (merged as any)[field] = this.coerceRadioValue(field);
+    }
     return merged as V;
   }
 
   getValue(field: keyof V & string): V[typeof field] {
+    if (this._radioRefs.has(field)) {
+      return this.coerceRadioValue(field) as V[typeof field];
+    }
     const el = this._refs.get(field);
     if (el) return this.coerceRefValue(field, el) as V[typeof field];
     return this.state.get(`values.${field}` as any);
@@ -290,29 +318,69 @@ export class SnapFormStore<
     return "string";
   }
 
-  private coerceRefValue(field: string, el: FormElement): unknown {
+  private getRadioValue(field: string): string | undefined {
+    const set = this._radioRefs.get(field);
+    if (!set) return undefined;
+    for (const el of set) {
+      if ((el as HTMLInputElement).checked) return el.value;
+    }
+    return undefined;
+  }
+
+  private coerceStringValue(field: string, raw: string): unknown {
     const typ = this.getFieldType(field);
-    if (typ === "number") { return el.value === "" ? NaN : Number(el.value); }
-    if (typ === "boolean") { return (el as HTMLInputElement).checked; }
-    return el.value;
+    if (typ === "number") return raw === "" ? NaN : Number(raw);
+    return raw;
+  }
+
+  private coerceRadioValue(field: string): unknown {
+    const raw = this.getRadioValue(field);
+    if (raw === undefined) return undefined;
+    return this.coerceStringValue(field, raw);
+  }
+
+  private coerceRefValue(field: string, el: FormElement): unknown {
+    if (this.getFieldType(field) === "boolean") { return (el as HTMLInputElement).checked; }
+    return this.coerceStringValue(field, el.value);
   }
 
   private syncRefToState(field: keyof V & string): void {
+    if (this._radioRefs.has(field)) {
+      const val = this.coerceRadioValue(field);
+      if (val !== undefined) {
+        this.state.set(`values.${field}` as any, val as any);
+      }
+      return;
+    }
     const el = this._refs.get(field);
     if (!el) { return; }
     this.state.set(`values.${field}` as any, this.coerceRefValue(field, el) as any);
   }
 
   private syncFromRefs(): void {
-    if (this._refs.size === 0) return;
+    if (this._refs.size === 0 && this._radioRefs.size === 0) return;
     this.state.batch(() => {
       for (const [field, el] of this._refs) {
         this.state.set(`values.${field}` as any, this.coerceRefValue(field, el) as any);
+      }
+      for (const [field] of this._radioRefs) {
+        const val = this.coerceRadioValue(field);
+        if (val !== undefined) {
+          this.state.set(`values.${field}` as any, val as any);
+        }
       }
     });
   }
 
   private syncValueToDom(field: string, value: unknown): void {
+    const radioSet = this._radioRefs.get(field);
+    if (radioSet) {
+      const strVal = String(value ?? "");
+      for (const el of radioSet) {
+        (el as HTMLInputElement).checked = el.value === strVal;
+      }
+      return;
+    }
     const el = this._refs.get(field);
     if (!el) { return; }
     if (this.getFieldType(field) === "boolean") {
@@ -323,9 +391,12 @@ export class SnapFormStore<
   }
 
   private syncToDom(): void {
-    if (this._refs.size === 0) return;
+    if (this._refs.size === 0 && this._radioRefs.size === 0) return;
     const values = this.state.get("values");
     for (const [field] of this._refs) {
+      this.syncValueToDom(field, (values as any)[field]);
+    }
+    for (const [field] of this._radioRefs) {
       this.syncValueToDom(field, (values as any)[field]);
     }
   }
