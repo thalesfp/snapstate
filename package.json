@@ -27,6 +27,7 @@
     "dist"
   ],
   "scripts": {
+    "prepublishOnly": "npm run build && npm test",
     "build": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -61,5 +62,24 @@
     "vitest": "^2.0.0",
     "zod": "^4.3.6"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "author": "Thales",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thalesfp/snapstate.git"
+  },
+  "homepage": "https://github.com/thalesfp/snapstate#readme",
+  "bugs": {
+    "url": "https://github.com/thalesfp/snapstate/issues"
+  },
+  "keywords": [
+    "state",
+    "reactive",
+    "store",
+    "react",
+    "form",
+    "zod",
+    "subscriptions",
+    "path-based"
+  ]
 }
