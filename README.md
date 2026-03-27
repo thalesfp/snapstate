@@ -190,6 +190,19 @@ const UserCard = userStore.connect(CardView, {
 
 `pick(path)` subscribes to that exact path — the component only re-renders when those specific values change.
 
+**Cleanup** — run teardown when the component disconnects:
+
+```tsx
+const Dashboard = dashboardStore.connect(DashboardView, {
+  props: (s) => ({ stats: s.state.get("stats") }),
+  fetch: (s) => s.loadStats(),
+  cleanup: (s) => s.resetStats(),
+  loading: () => <Skeleton />,
+});
+```
+
+`cleanup` fires once on unmount. It works with or without `fetch` — use it to abort requests, clear timers, or reset store state. Safe in React StrictMode.
+
 ## Form Store — `SnapFormStore<V, K>`
 
 Extends `ReactSnapStore`. Available from `@thalesfp/snapstate/form`. Requires `zod` peer dependency.
