@@ -103,7 +103,7 @@ export class SnapFormStore<
     const shapeKeys = this.objectSchema ? Object.keys(this.objectSchema.shape) : [];
     const allKeys = new Set([...Object.keys(initial), ...shapeKeys]);
     for (const key of allKeys) {
-      if (values[key] !== initial[key]) { return true; }
+      if (!this.valuesEqual(values[key], initial[key])) { return true; }
     }
     return false;
   }
@@ -134,6 +134,9 @@ export class SnapFormStore<
             set.add(el);
           } else {
             this._refs.set(field, el);
+            if (value instanceof Date) {
+              this.syncValueToDom(field, value);
+            }
           }
           trackedEls.add(el);
         } else {
@@ -152,7 +155,7 @@ export class SnapFormStore<
       name: field,
       ...(isBool
         ? { defaultChecked: Boolean(value) }
-        : { defaultValue: String(value ?? "") }),
+        : { defaultValue: value instanceof Date ? this.formatLocalDateTime(value) : String(value ?? "") }),
       onBlur: () => {
         this.syncRefToState(field);
         this.handleBlur(field);
@@ -204,9 +207,9 @@ export class SnapFormStore<
   }
 
   isFieldDirty(field: keyof V & string): boolean {
-    return (
-      this.state.get(`values.${field}` as any) !==
-      this.state.get(`initial.${field}` as any)
+    return !this.valuesEqual(
+      this.state.get(`values.${field}` as any),
+      this.state.get(`initial.${field}` as any),
     );
   }
 
@@ -278,10 +281,12 @@ export class SnapFormStore<
           else if (ft === "boolean") { (acc as any)[key] = false; }
           else if (ft === "null") { (acc as any)[key] = null; }
           else if (val === null && ft === "string") { (acc as any)[key] = ""; }
+          else if (val === null && ft === "date") { (acc as any)[key] = null; }
           else if (val === null && ft === "array") { (acc as any)[key] = []; }
           else if (val === null && (ft === "object" || ft === "record")) { (acc as any)[key] = {}; }
           else { (acc as any)[key] = val; }
-        } else if (typeof val === "number") { (acc as any)[key] = 0; }
+        } else if (val instanceof Date) { (acc as any)[key] = null; }
+        else if (typeof val === "number") { (acc as any)[key] = 0; }
         else if (typeof val === "boolean") { (acc as any)[key] = false; }
         else if (Array.isArray(val)) { (acc as any)[key] = []; }
         else if (typeof val === "object") { (acc as any)[key] = {}; }
@@ -307,9 +312,16 @@ export class SnapFormStore<
     this.syncToDom();
   }
 
+  private valuesEqual(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+    return false;
+  }
+
   private getFieldType(field: string): string {
     const initial = this.state.get("initial");
     const val = initial[field];
+    if (val instanceof Date) { return "date"; }
     if (val !== undefined && val !== null) { return typeof val; }
     if (this.objectSchema) {
       const base = getBaseSchemaType(this.objectSchema.shape[field]);
@@ -327,9 +339,37 @@ export class SnapFormStore<
     return undefined;
   }
 
+  private formatLocalDateTime(date: Date): string {
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`;
+  }
+
+  private formatDateForInput(el: HTMLInputElement, date: Date): string {
+    const full = this.formatLocalDateTime(date);
+    if (el.type === "datetime-local") return full;
+    if (el.type === "time") return full.slice(11);
+    return full.slice(0, 10);
+  }
+
   private coerceStringValue(field: string, raw: string): unknown {
     const typ = this.getFieldType(field);
     if (typ === "number") return raw === "" ? NaN : Number(raw);
+    if (typ === "date") {
+      if (raw === "") return null;
+      // HH:MM (time input) — set hours/minutes on today's date
+      if (/^\d{2}:\d{2}$/.test(raw)) {
+        const [h, m] = raw.split(":").map(Number);
+        const d = new Date();
+        d.setHours(h, m, 0, 0);
+        return d;
+      }
+      // YYYY-MM-DD (date input) — append T00:00:00 to parse as local, not UTC
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        raw = raw + "T00:00:00";
+      }
+      const d = new Date(raw);
+      return isNaN(d.getTime()) ? null : d;
+    }
     return raw;
   }
 
@@ -383,8 +423,11 @@ export class SnapFormStore<
     }
     const el = this._refs.get(field);
     if (!el) { return; }
-    if (this.getFieldType(field) === "boolean") {
+    const ft = this.getFieldType(field);
+    if (ft === "boolean") {
       (el as HTMLInputElement).checked = Boolean(value);
+    } else if (ft === "date" && value instanceof Date) {
+      el.value = this.formatDateForInput(el as HTMLInputElement, value);
     } else {
       el.value = String(value ?? "");
     }

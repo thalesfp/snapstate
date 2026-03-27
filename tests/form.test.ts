@@ -1263,4 +1263,197 @@ describe("SnapFormStore", () => {
       expect(f.getValue("color")).toBe("red");
     });
   });
+
+  describe("date input support", () => {
+    const dateSchema = z.object({ when: z.date() });
+    type DateValues = z.infer<typeof dateSchema>;
+
+    it("coerces date input value to local Date object", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date(2025, 0, 15) });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "date";
+      reg.ref(el);
+      el.value = "2025-06-20";
+      const result = f.getValue("when") as Date;
+      expect(result.getFullYear()).toBe(2025);
+      expect(result.getMonth()).toBe(5);
+      expect(result.getDate()).toBe(20);
+      expect(result.getHours()).toBe(0);
+    });
+
+    it("coerces datetime-local value to Date object", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date("2025-01-15T10:30") });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "datetime-local";
+      reg.ref(el);
+      el.value = "2025-06-20T14:30";
+      expect(f.getValue("when")).toEqual(new Date("2025-06-20T14:30"));
+    });
+
+    it("coerces time input value to today-based Date", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date("2025-01-15T08:00") });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "time";
+      reg.ref(el);
+      el.value = "14:30";
+      const result = f.getValue("when") as Date;
+      expect(result).toBeInstanceOf(Date);
+      expect(result.getHours()).toBe(14);
+      expect(result.getMinutes()).toBe(30);
+    });
+
+    it("returns null for empty date input", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date("2025-01-15") });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "date";
+      reg.ref(el);
+      el.value = "";
+      expect(f.getValue("when")).toBeNull();
+    });
+
+    it("register returns formatted defaultValue for Date", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date("2025-03-15T10:30:00Z") });
+      const reg = f.register("when");
+      expect(reg.defaultValue).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+    });
+
+    it("setValue pushes formatted date to DOM", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date("2025-01-15") });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "date";
+      reg.ref(el);
+      f.setValue("when", new Date(2025, 8, 1));
+      expect(el.value).toBe("2025-09-01");
+    });
+
+    it("setValue pushes formatted datetime-local to DOM", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date("2025-01-15") });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "datetime-local";
+      reg.ref(el);
+      f.setValue("when", new Date(2025, 8, 1, 14, 30));
+      expect(el.value).toBe("2025-09-01T14:30");
+    });
+
+    it("onBlur syncs date input to state", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date(2025, 0, 15) });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "date";
+      reg.ref(el);
+      el.value = "2025-12-25";
+      reg.onBlur();
+      expect((f.values.when as Date).getFullYear()).toBe(2025);
+      expect((f.values.when as Date).getMonth()).toBe(11);
+      expect((f.values.when as Date).getDate()).toBe(25);
+    });
+
+    it("validate parses date field correctly", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date(2025, 0, 15) });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "date";
+      reg.ref(el);
+      el.value = "2025-06-20";
+      const data = f.validate();
+      expect(data).not.toBeNull();
+      expect((data!.when as Date).getDate()).toBe(20);
+      expect((data!.when as Date).getMonth()).toBe(5);
+    });
+
+    it("works with nullable date schema", () => {
+      const nullableDateSchema = z.object({ when: z.date().nullable() });
+      type NullableDateValues = z.infer<typeof nullableDateSchema>;
+      const f = new SnapFormStore<NullableDateValues>(nullableDateSchema, { when: null });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "date";
+      reg.ref(el);
+      el.value = "2025-06-20";
+      const result = f.getValue("when") as Date;
+      expect(result.getFullYear()).toBe(2025);
+      expect(result.getDate()).toBe(20);
+    });
+
+    it("reset restores initial date to DOM", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date(2025, 0, 15) });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "date";
+      reg.ref(el);
+      f.setValue("when", new Date(2025, 5, 20));
+      f.reset();
+      expect(el.value).toBe("2025-01-15");
+    });
+
+    it("clear sets date field to null", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date(2025, 0, 15) });
+      f.clear();
+      expect(f.values.when).toBeNull();
+    });
+
+    it("clear sets nullable date field to null", () => {
+      const nullableDateSchema = z.object({ when: z.date().nullable() });
+      type NullableDateValues = z.infer<typeof nullableDateSchema>;
+      const f = new SnapFormStore<NullableDateValues>(nullableDateSchema, { when: null });
+      f.clear();
+      expect(f.values.when).toBeNull();
+    });
+
+    it("returns null for invalid date string", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date(2025, 0, 15) });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "date";
+      reg.ref(el);
+      el.value = "not-a-date";
+      expect(f.getValue("when")).toBeNull();
+    });
+
+    it("isDirty returns false after date round-trip without changes", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date(2025, 0, 15) });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "date";
+      reg.ref(el);
+      el.value = "2025-01-15";
+      reg.onBlur();
+      expect(f.isDirty).toBe(false);
+    });
+
+    it("isFieldDirty returns false for unchanged date", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date(2025, 0, 15) });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "date";
+      reg.ref(el);
+      el.value = "2025-01-15";
+      reg.onBlur();
+      expect(f.isFieldDirty("when")).toBe(false);
+    });
+
+    it("date input gets correctly formatted value on mount", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date(2025, 5, 20) });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "date";
+      reg.ref(el);
+      expect(el.value).toBe("2025-06-20");
+    });
+
+    it("time input gets correctly formatted value on mount", () => {
+      const f = new SnapFormStore<DateValues>(dateSchema, { when: new Date(2025, 0, 15, 14, 30) });
+      const reg = f.register("when");
+      const el = document.createElement("input");
+      el.type = "time";
+      reg.ref(el);
+      expect(el.value).toBe("14:30");
+    });
+  });
 });
