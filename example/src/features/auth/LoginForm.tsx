@@ -38,8 +38,9 @@ function LoginFormInner({
 }
 
 export const LoginForm = loginFormStore.connect(LoginFormInner, {
-  select: (pick) => ({
-    isLoading: pick("submitStatus.status.isLoading"),
-    error: pick("submitStatus.error"),
+  props: (s) => ({
+    isLoading: s.getStatus("login").status.isLoading,
+    error: s.getStatus("login").error,
   }),
+  cleanup: (s) => s.clear(),
 });

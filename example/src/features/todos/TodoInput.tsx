@@ -34,6 +34,7 @@ export function TodoInputInner({ addState }: TodoInputProps) {
   );
 }
 
-export const TodoInput = todoStore.connect(TodoInputInner, (store) => ({
-  addState: store.getStatus("add"),
-}));
+export const TodoInput = todoStore.connect(TodoInputInner, {
+  props: (store) => ({ addState: store.getStatus("add") }),
+  cleanup: () => todoInputStore.clear(),
+});

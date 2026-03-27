@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
 import { accountStore } from "../../stores";
 
@@ -14,10 +14,6 @@ function ProfilePageInner({
   isUpdating: boolean;
 }) {
   const [success, setSuccess] = useState(false);
-
-  useEffect(() => {
-    accountStore.loadCurrentProfile();
-  }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,10 +64,12 @@ function ProfilePageInner({
 }
 
 export const ProfilePage = accountStore.connect(ProfilePageInner, {
-  select: (pick) => ({
-    nameError: pick("errors.name"),
-    emailError: pick("errors.email"),
-    themeError: pick("errors.theme"),
-    isUpdating: pick("submitStatus.status.isLoading"),
+  props: (s) => ({
+    nameError: s.errors.name,
+    emailError: s.errors.email,
+    themeError: s.errors.theme,
+    isUpdating: s.state.get("submitStatus").status.isLoading,
   }),
+  setup: (s) => s.loadCurrentProfile(),
+  cleanup: (s) => s.reset(),
 });
