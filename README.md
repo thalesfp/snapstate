@@ -1,213 +1,142 @@
-# snapstate
+# @thalesfp/snapstate
 
-Reactive state management for React. Class-based stores with a clean public API — business logic stays in the store, components stay dumb.
+State management for React. Replace useState/useEffect tangles with class-based stores that are easy to test, easy to extend, and predictable by default.
 
-## Philosophy
-
-No more `useState` hell. No more `useEffect` spaghetti. Just stores that work.
-
-- **Readable** — stores are plain classes with explicit methods; no magic, no hidden wiring
-- **Testable** — business logic tested separately from React; stores are plain objects (call methods, assert state), no rendering or providers needed. Unit and integration tests are equally simple to write
-- **Extensible** — inherit from `SnapStore`, add methods, compose stores; no middleware chains or plugin systems
-- **Predictable** — state flows in one direction, updates are synchronous within a batch, and structural sharing guarantees stable references for unchanged data
-- **Dumb views** — components receive props and render; business logic lives in stores, not in hooks or event handlers
-
-## Why?
-
-### Before — the `useState` + `useEffect` version
-
-```tsx
-function UserList() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [filter, setFilter] = useState<"all" | "active">("all");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetch("/api/users")
-      .then((r) => r.json())
-      .then((data) => { if (!cancelled) { setUsers(data); setLoading(false); } })
-      .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
-    return () => { cancelled = true; };
-  }, []);
-
-  const filtered = filter === "active" ? users.filter((u) => u.active) : users;
-
-  if (loading) return <p>Loading...</p>;
-  if (error) return <p>Error: {error}</p>;
-  return (
-    <div>
-      <button onClick={() => setFilter(filter === "all" ? "active" : "all")}>{filter}</button>
-      <ul>{filtered.map((u) => <li key={u.id}>{u.name}</li>)}</ul>
-    </div>
-  );
-}
+```bash
+npm install @thalesfp/snapstate
 ```
 
-### After — the snapstate version
+## Features
 
-**Store** (encapsulates all state + async):
+- **Class-based stores** — business logic in stores, components stay dumb
+- **Path-based subscriptions** — listeners fire only when relevant paths change
+- **Structural sharing** — unchanged subtrees keep reference identity
+- **Auto-batching** — synchronous sets coalesce into a single notification
+- **Built-in HTTP** — pluggable client with loading/error status tracking
+- **React integration** — `connect()` HOC with `useSyncExternalStore` under the hood
+- **Form stores** — Zod validation, `register()` for all HTML input types, dirty tracking, submit lifecycle
+
+## Quick Start
 
 ```ts
-class UserStore extends SnapStore<{ users: User[]; filter: "all" | "active" }, "load"> {
-  constructor() { super({ users: [], filter: "all" }); }
+import { ReactSnapStore } from "@thalesfp/snapstate/react";
 
-  get filtered() {
-    const { users, filter } = this.state.get();
-    return filter === "active" ? users.filter((u) => u.active) : users;
+interface State {
+  todos: { id: string; text: string; done: boolean }[];
+}
+
+class TodoStore extends ReactSnapStore<State, "load"> {
+  constructor() {
+    super({ todos: [] });
   }
 
-  loadUsers() {
-    return this.api.get("load", "/api/users", (data) => this.state.set("users", data));
+  loadTodos() {
+    return this.api.get("load", "/api/todos", (data) => this.state.set("todos", data));
   }
 
-  toggleFilter() {
-    this.state.set("filter", (f) => (f === "all" ? "active" : "all"));
+  addTodo(text: string) {
+    this.state.append("todos", { id: crypto.randomUUID(), text, done: false });
+  }
+
+  toggle(id: string) {
+    this.state.patch("todos", (t) => t.id === id, { done: true });
   }
 }
+
+export const todoStore = new TodoStore();
 ```
 
-**Component** (pure function of props):
-
 ```tsx
-function UserListInner({ filtered }: { filtered: User[] }) {
-  return <ul>{filtered.map((u) => <li key={u.id}>{u.name}</li>)}</ul>;
+function TodoListView({ todos }: { todos: State["todos"] }) {
+  return (
+    <ul>
+      {todos.map((t) => (
+        <li key={t.id} onClick={() => todoStore.toggle(t.id)}>
+          {t.done ? <s>{t.text}</s> : t.text}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
-export const UserList = userStore.connect(UserListInner, {
-  props: (s) => ({ filtered: s.filtered }),
-  fetch: (s) => s.loadUsers(),
+export const TodoList = todoStore.connect(TodoListView, {
+  props: (s) => ({ todos: s.state.get("todos") }),
+  fetch: (s) => s.loadTodos(),
   loading: () => <p>Loading...</p>,
   error: ({ error }) => <p>Error: {error}</p>,
 });
 ```
 
-## Install
+## Entry Points
 
-```bash
-npm install snapstate
-```
+| Import | Description |
+|---|---|
+| `@thalesfp/snapstate` | Core `SnapStore`, types, `setHttpClient` |
+| `@thalesfp/snapstate/react` | `ReactSnapStore` with `connect()` HOC |
+| `@thalesfp/snapstate/form` | `SnapFormStore` with Zod validation and form lifecycle |
 
-## Quick start
+React and Zod are optional peer dependencies — only needed if you use their respective entry points.
 
-```ts
-import { SnapStore } from "snapstate/react";
+## Core API — `SnapStore<T, K>`
 
-interface Todo {
-  id: string;
-  text: string;
-  completed: boolean;
-}
+Base class. `T` is the state shape, `K` is the union of async operation keys.
 
-type TodoOp = "add" | "toggle";
+### State Methods (protected `this.state.*`)
 
-interface TodoState {
-  todos: Todo[];
-  filter: "all" | "active" | "completed";
-}
+**Scalar:**
 
-class TodoStore extends SnapStore<TodoState, TodoOp> {
-  constructor() {
-    super({ todos: [], filter: "all" });
-  }
+| Method | Description |
+|---|---|
+| `get()` | Read the full state object |
+| `get(path)` | Read a value at a dot-path (e.g. `"user.name"`) |
+| `set(path, value)` | Set a value. Accepts a value or updater `(prev) => next` |
+| `batch(fn)` | Group multiple sets into a single notification |
+| `computed(deps, fn)` | Lazily-recomputed derived value from dependency paths |
 
-  addTodo(text: string) {
-    return this.api.post<Todo>("add", "/api/todos", {
-      body: { text },
-      onSuccess: (todo) => this.state.append("todos", todo),
-    });
-  }
+**Array:**
 
-  toggleTodo(id: string) {
-    this.state.patch("todos", (t) => t.id === id, { completed: true });
-  }
-}
-```
+| Method | Description |
+|---|---|
+| `append(path, ...items)` | Add items to end |
+| `prepend(path, ...items)` | Add items to start |
+| `insertAt(path, index, ...items)` | Insert at index |
+| `patch(path, predicate, updates)` | Shallow-merge into matching items |
+| `remove(path, predicate)` | Remove matching items |
+| `removeAt(path, index)` | Remove at index (supports negative) |
+| `at(path, index)` | Get item at index (supports negative) |
+| `filter(path, predicate)` | Return matching items |
+| `find(path, predicate)` | Return first match |
+| `findIndexOf(path, predicate)` | Index of first match, or -1 |
+| `count(path, predicate)` | Count matching items |
 
-## React usage
+### HTTP Methods (protected `this.api.*`)
 
-```tsx
-// store.ts
-import { SnapStore } from "snapstate/react";
+| Method | Description |
+|---|---|
+| `fetch(key, fn)` | Run async function with tracked status |
+| `get(key, url, onSuccess?)` | GET with status tracking |
+| `post(key, url, options?)` | POST with status tracking |
+| `put(key, url, options?)` | PUT with status tracking |
+| `patch(key, url, options?)` | PATCH with status tracking |
+| `delete(key, url, options?)` | DELETE with status tracking |
 
-const todoStore = new TodoStore();
+Options: `{ body?, headers?, onSuccess?(data)?, onError?(error)? }`
 
-// TodoList.tsx
-function TodoListInner({ todos, remaining }: { todos: Todo[]; remaining: number }) {
-  return (
-    <div>
-      <h2>{remaining} left</h2>
-      <ul>
-        {todos.map((t) => (
-          <li key={t.id} onClick={() => todoStore.toggleTodo(t.id)}>
-            {t.completed ? <s>{t.text}</s> : t.text}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+### Public Methods
 
-// connect() wires the component to the store.
-// It re-renders only when the mapped props change (shallow comparison).
-export const TodoList = todoStore.connect(TodoListInner, (store) => ({
-  todos: store.filteredTodos,
-  remaining: store.remaining,
-}));
+| Method | Description |
+|---|---|
+| `subscribe(callback)` | Subscribe to all changes. Returns unsubscribe function |
+| `subscribe(path, callback)` | Subscribe to a specific path |
+| `getSnapshot()` | Current state (compatible with `useSyncExternalStore`) |
+| `getStatus(key)` | Async status: `{ status: AsyncStatus, error: string \| null }` |
+| `destroy()` | Tear down subscriptions |
 
-// connect() with async fetch, loading, and error handling.
-// Calls `fetch` on mount, renders `loading` while pending, `error` on failure.
-export const TodoListAsync = todoStore.connect(TodoListInner, {
-  props: (store) => ({
-    todos: store.filteredTodos,
-    remaining: store.remaining,
-  }),
-  fetch: (store) => store.loadTodos(),
-  loading: () => <p>Loading...</p>,
-  error: ({ error }) => <p>Failed: {error}</p>,
-});
-```
-
-## Granular selectors
-
-```tsx
-// connect() with granular path-based subscriptions.
-// Only re-renders when the specific picked paths change.
-export const UserCard = userStore.connect(UserCardInner, {
-  select: (pick) => ({
-    name: pick("user.name"),
-    avatar: pick("user.avatar"),
-  }),
-});
-```
-
-`pick(path)` reads a value at a dot-path and subscribes to that exact path. The component won't re-render when unrelated state changes (e.g. `settings.theme`).
-
-**`props` vs `select`** — `props` receives the full store instance, so it can access computed getters and derived values. `select` only reads raw state at dot-paths, but subscribes granularly — use it when you want precise re-render control over raw state.
-
-## Optimistic updates
+### Custom HTTP Client
 
 ```ts
-// deleteTodo: remove immediately, rollback on API failure
-deleteTodo(id: string) {
-  const idx = this.state.findIndexOf("todos", (t) => t.id === id);
-  const removed = this.state.at("todos", idx)!;
-  this.state.removeAt("todos", idx);
+import { setHttpClient } from "@thalesfp/snapstate";
 
-  return this.api.delete("remove", `/api/todos/${id}`, {
-    onError: () => this.state.insertAt("todos", idx, removed),
-  });
-}
-```
-
-## Custom HTTP client
-
-```ts
-import { setHttpClient } from "snapstate/react";
-
-// Add auth header to every request
 setHttpClient({
   async request(url, init) {
     const res = await fetch(url, {
@@ -222,26 +151,51 @@ setHttpClient({
 });
 ```
 
-## Computed values
+## React Integration — `ReactSnapStore<T, K>`
 
-```ts
-class TodoStore extends SnapStore<TodoState, TodoOp> {
-  activeTodos = this.state.computed(["todos"], (s) =>
-    s.todos.filter((t) => !t.completed),
-  );
+Extends `SnapStore`. Available from `@thalesfp/snapstate/react`.
 
-  // activeTodos.value lazily recomputes when "todos" changes
-}
+### connect()
+
+**Simple** — map store to props:
+
+```tsx
+const UserName = userStore.connect(
+  ({ name }: { name: string }) => <span>{name}</span>,
+  (store) => ({ name: store.state.get("user.name") }),
+);
 ```
 
-## Form stores
+**Advanced** — with data fetching:
 
-`SnapFormStore` extends `ReactSnapStore` with Zod schema validation, per-field errors, dirty tracking, and a submit lifecycle. Available from `snapstate/form`.
+```tsx
+const UserProfile = userStore.connect(ProfileView, {
+  props: (s) => ({ user: s.state.get("user") }),
+  fetch: (s) => s.loadUser(),
+  loading: () => <Skeleton />,
+  error: ({ error }) => <p>{error}</p>,
+});
+```
 
-> Requires `zod` as a peer dependency.
+**Granular** — path-based subscriptions:
+
+```tsx
+const UserCard = userStore.connect(CardView, {
+  select: (pick) => ({
+    name: pick("user.name"),
+    avatar: pick("user.avatar"),
+  }),
+});
+```
+
+`pick(path)` subscribes to that exact path — the component only re-renders when those specific values change.
+
+## Form Store — `SnapFormStore<V, K>`
+
+Extends `ReactSnapStore`. Available from `@thalesfp/snapstate/form`. Requires `zod` peer dependency.
 
 ```ts
-import { SnapFormStore } from "snapstate/form";
+import { SnapFormStore } from "@thalesfp/snapstate/form";
 import { z } from "zod";
 
 const schema = z.object({
@@ -262,178 +216,94 @@ class LoginStore extends SnapFormStore<LoginValues, "login"> {
     });
   }
 }
-
-const loginStore = new LoginStore();
 ```
 
+### Using register()
+
+`register()` returns props to spread onto form elements — handles ref tracking, value sync, and event binding:
+
 ```tsx
-function LoginFormInner({ values, errors, isDirty }: {
-  values: LoginValues;
-  errors: FormErrors<LoginValues>;
-  isDirty: boolean;
-}) {
+const loginStore = new LoginStore();
+
+function LoginFormView({ errors }: { errors: FormErrors<LoginValues> }) {
   return (
     <form onSubmit={(e) => { e.preventDefault(); loginStore.login(); }}>
-      <input
-        value={values.email}
-        onChange={(e) => loginStore.setValue("email", e.target.value)}
-        onBlur={() => loginStore.handleBlur("email")}
-      />
+      <input {...loginStore.register("email")} />
       {errors.email && <span>{errors.email[0]}</span>}
 
-      <input
-        type="password"
-        value={values.password}
-        onChange={(e) => loginStore.setValue("password", e.target.value)}
-        onBlur={() => loginStore.handleBlur("password")}
-      />
+      <input type="password" {...loginStore.register("password")} />
       {errors.password && <span>{errors.password[0]}</span>}
 
-      <button disabled={!isDirty}>Log in</button>
+      <button type="submit">Log in</button>
     </form>
   );
 }
 
-export const LoginForm = loginStore.connect(LoginFormInner, (s) => ({
-  values: s.values,
+export const LoginForm = loginStore.connect(LoginFormView, (s) => ({
   errors: s.errors,
-  isDirty: s.isDirty,
 }));
 ```
 
-**Validation modes:**
+### Validation Modes
 
 | Mode | Behavior |
 |---|---|
 | `onSubmit` | Validate only when `submit()` is called (default) |
-| `onBlur` | Validate a field when `handleBlur(field)` is called |
-| `onChange` | Validate a field on every `setValue(field, value)` call |
+| `onBlur` | Validate field on blur |
+| `onChange` | Validate field on every change |
 
-## Entry points
+### Supported Form Elements
 
-| Import | Description |
+| Element | How it works |
 |---|---|
-| `snapstate` | Core `SnapStore`, types, `setHttpClient` |
-| `snapstate/react` | React-aware `ReactSnapStore` with `connect()` and `useSyncExternalStore` compatibility |
-| `snapstate/form` | Form-aware store with Zod validation, field-level errors, dirty tracking, and submit handling |
+| `<input type="text">` (and password, email, url, tel, search) | `el.value` read/write |
+| `<input type="number">` | Coerced via `Number()` when field type is `number` |
+| `<input type="checkbox">` | `el.checked` / `defaultChecked` for boolean fields |
+| `<textarea>` | `el.value` read/write |
+| `<select>` | `el.value` read/write |
+| `<input type="range">` | Number coercion; browser handles clamping |
+| `<input type="radio">` | Multiple elements per field; reads checked value |
+| `<input type="date">` / `time` / `datetime-local` | Coerced to `Date`; formatted for DOM |
+| `<select multiple>` | Reads `selectedOptions` as array; coerces item types |
+| `<input type="file">` | Returns `File` or `File[]`; reset clears selection |
 
-## API
-
-### `SnapStore<T, K>`
-
-Base class. `T` is the state shape, `K` is the union of operation keys for async status tracking.
-
-**Public methods:**
+### Form Methods
 
 | Method | Description |
 |---|---|
-| `subscribe(callback)` | Subscribe to all state changes. Returns unsubscribe function. |
-| `getSnapshot()` | Return a snapshot of current state. Compatible with `useSyncExternalStore`. |
-| `getStatus(key)` | Get the async status (`idle` / `loading` / `ready` / `error`) of an operation. |
-| `destroy()` | Tear down subscriptions and cleanup. |
+| `register(field)` | Returns `{ ref, name, defaultValue, onBlur, onChange }` for form elements |
+| `setValue(field, value)` | Set field value |
+| `getValue(field)` | Get current field value (reads from DOM ref if registered) |
+| `getValues()` | Get all current values |
+| `validate()` | Validate full form, returns parsed data or `null` |
+| `validateField(field)` | Validate single field |
+| `submit(key, handler)` | Validate then call handler with async status tracking |
+| `reset()` | Reset to initial values |
+| `clear()` | Clear to type-appropriate zero values |
+| `setInitialValues(values)` | Update initial values |
+| `isDirty` / `isFieldDirty(field)` | Dirty tracking (supports Date and array equality) |
+| `errors` / `isValid` | Field-level error arrays |
 
-**Protected — `this.state.*` (scalar):**
+## Key Concepts
 
-| Method | Description |
-|---|---|
-| `state.get()` | Read the full state object. |
-| `state.get(path)` | Read a value at a dot-separated path (e.g. `"user.name"`). |
-| `state.set(path, value)` | Set a value at `path`. Accepts a value or updater `(prev) => next`. |
-| `state.batch(fn)` | Group multiple `state.set` calls into a single notification flush. |
-| `state.computed(deps, fn)` | Create a lazily-recomputed derived value from dependency paths. |
+**Path-based subscriptions** — State changes are tracked via dot-separated paths (e.g. `"user.name"`, `"items.0.title"`). A trie structure ensures listeners fire only when their path or its ancestors/descendants change.
 
-**Protected — `this.state.*` (array):**
+**Structural sharing** — Every `set()` produces a new root object but preserves reference identity for unchanged subtrees. This makes React's shallow comparison efficient.
 
-| Method | Description |
-|---|---|
-| `state.append(path, ...items)` | Append items to end of array. |
-| `state.prepend(path, ...items)` | Add items to start of array. |
-| `state.insertAt(path, index, ...items)` | Insert items at a specific index. |
-| `state.patch(path, predicate, updates)` | Shallow-merge updates into all matching items. |
-| `state.remove(path, predicate)` | Remove all items matching predicate. |
-| `state.removeAt(path, index)` | Remove item at index. Supports negative indices. |
-| `state.at(path, index)` | Get item at index. Supports negative indices. |
-| `state.filter(path, predicate)` | Return all matching items. |
-| `state.find(path, predicate)` | Return first matching item. |
-| `state.findIndexOf(path, predicate)` | Return index of first match, or -1. |
-| `state.count(path, predicate)` | Count matching items. |
+**Auto-batching** — Multiple synchronous `set()` calls queue a single notification via `queueMicrotask()`. Use `batch()` for explicit control.
 
-**Protected — `this.api.*`:**
+**Async status tracking** — Every `api.*` call is keyed. `getStatus(key)` returns `{ status, error }` where status has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`.
 
-| Method | Description |
-|---|---|
-| `api.fetch(key, fn)` | Run an async function with tracked loading/error status. |
-| `api.get(key, url, onSuccess?)` | GET request with status tracking. |
-| `api.post(key, url, options?)` | POST request with status tracking. |
-| `api.put(key, url, options?)` | PUT request with status tracking. |
-| `api.patch(key, url, options?)` | PATCH request with status tracking. |
-| `api.delete(key, url, options?)` | DELETE request with status tracking. |
+## Example App
 
-### `ReactSnapStore<T, K>`
+A full Vite + React 19 demo lives in [`example/`](./example/) with todos, auth, and account profile features.
 
-Extends `SnapStore` with React integration. Available from `snapstate/react`.
+```bash
+npm run build              # Build library first
+cd example && npm install  # Install example deps
+npm run example:dev        # Start dev server
+```
 
-| Method | Description |
-|---|---|
-| `connect(Component, mapToProps)` | Wire a component to the store, injecting derived props. |
-| `connect(Component, config)` | Wire with async data fetching, loading, and error states. |
-| `connect(Component, { select })` | Wire with granular path-based subscriptions via `pick(path)`. |
+## License
 
-### `SnapFormStore<V, K>`
-
-Extends `ReactSnapStore` with form handling. Available from `snapstate/form`. `V` is the form values shape, `K` is the union of operation keys.
-
-Constructor: `new SnapFormStore(schema, initialValues, config?)`
-
-- `schema` — a Zod schema used for validation
-- `initialValues` — starting values for the form
-- `config.validationMode` — `"onSubmit"` (default), `"onBlur"`, or `"onChange"`
-
-**Public getters:**
-
-| Getter | Type | Description |
-|---|---|---|
-| `values` | `V` | Current form values |
-| `errors` | `FormErrors<V>` | Validation errors keyed by field (`{ [field]: string[] }`) |
-| `isDirty` | `boolean` | Whether any value differs from initial values |
-| `isValid` | `boolean` | Whether the form has no errors |
-
-**Public methods:**
-
-| Method | Description |
-|---|---|
-| `setValue(field, value)` | Set a field value. Triggers validation in `onChange` mode. |
-| `handleBlur(field)` | Call on field blur. Triggers validation in `onBlur` mode. |
-| `isFieldDirty(field)` | Check if a specific field differs from its initial value. |
-| `setError(field, message)` | Manually add an error message to a field. |
-| `clearErrors()` | Clear all validation errors. |
-| `validate()` | Validate the full form. Returns parsed data or `null`. |
-| `validateField(field)` | Validate a single field and update errors. |
-| `reset()` | Reset values to initial state and clear errors. |
-| `clear()` | Clear all values to type-appropriate zero-values and reset errors. |
-| `setInitialValues(values)` | Update initial values and sync current values. |
-| `submit(key, handler)` | Validate, then call `handler(values)` with tracked async status. Returns `undefined` if validation fails. |
-
-Inherits `connect()`, `subscribe()`, `getSnapshot()`, `getStatus()`, and `destroy()` from `ReactSnapStore`.
-
-**Types:**
-
-| Type | Description |
-|---|---|
-| `FormState<V>` | Internal state shape: `{ values, initial, errors, submitStatus }` |
-| `FormErrors<V>` | `{ [K in keyof V]?: string[] }` — field-level error messages |
-| `ValidationMode` | `"onSubmit" \| "onBlur" \| "onChange"` |
-
-### `setHttpClient(client)`
-
-Replace the global HTTP client used by `api.get` and `api.post/put/patch/delete`. The client must implement `request<R>(url, init?) => Promise<R>`.
-
-### `ApiRequestOptions<R>`
-
-Options for HTTP verb methods: `body`, `headers`, `onSuccess(data)`, `onError(error)`.
-
-## Architecture
-
-- **Path-based subscriptions** via a trie structure - listeners only fire when their path (or ancestors/descendants) change
-- **Auto-batching** - synchronous sets are coalesced via microtask by default
-- **Structural sharing** - `state.set` produces new references only along the updated path
+MIT
