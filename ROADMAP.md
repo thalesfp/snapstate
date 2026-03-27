@@ -11,6 +11,7 @@
 | `<input type="checkbox">` | `el.checked` / `defaultChecked` when initial value is `boolean` |
 | `<textarea>` | `el.value` read/write |
 | `<select>` | `el.value` read/write |
+| `<input type="range">` | Coerced via `Number(el.value)` when initial value is `number`; browser handles clamping |
 
 ### To be implemented
 
@@ -20,4 +21,3 @@
 | `<select multiple>` | `el.value` only returns first selection; needs `el.selectedOptions` to produce an array |
 | `<input type="file">` | `el.value` gives a fake path; needs `el.files` to return a `FileList` |
 | `<input type="date">` / `time` / `datetime-local` | Works as string via `el.value`, but no `Date` coercion in `coerceRefValue` |
-| `<input type="range">` | Works if initial value is `number`, but no explicit support or clamping |
