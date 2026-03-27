@@ -1,5 +1,5 @@
 {
-  "name": "snapstate",
+  "name": "@thalesfp/snapstate",
   "version": "0.1.0",
   "description": "Proxy-free reactive state library with path-based subscriptions",
   "type": "module",
