@@ -13,6 +13,7 @@ import type { StoreOptions, AsyncStatus, DotPaths, GetByPath } from "../core/typ
 
 interface ConnectConfig<S, MappedProps> {
   props: (store: S) => MappedProps;
+  setup?: (store: S) => void;
   fetch: (store: S) => Promise<void>;
   cleanup?: (store: S) => void;
   loading?: React.ComponentType;
@@ -21,6 +22,7 @@ interface ConnectConfig<S, MappedProps> {
 
 interface ConnectPropsConfig<S, MappedProps> {
   props: (store: S) => MappedProps;
+  setup?: (store: S) => void;
   cleanup?: (store: S) => void;
 }
 
@@ -88,6 +90,7 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
     const fetchFn = config?.fetch;
     const loadingComponent = config?.loading;
     const errorComponent = config?.error;
+    const setupFn = config?.setup;
     const cleanupFn = config?.cleanup;
 
     const Connected = forwardRef<unknown, Omit<P, keyof MappedProps>>(function Connected(ownProps, ref) {
@@ -125,6 +128,25 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
 
       const fetchGenRef = useRef(0);
 
+      const lifecycleGenRef = useRef(0);
+      useEffect(() => {
+        if (!setupFn && !cleanupFn) return;
+        const gen = ++lifecycleGenRef.current;
+        if (setupFn) {
+          queueMicrotask(() => {
+            if (gen === lifecycleGenRef.current) setupFn(store);
+          });
+        }
+        return () => {
+          const teardownGen = lifecycleGenRef.current;
+          if (cleanupFn) {
+            queueMicrotask(() => {
+              if (teardownGen === lifecycleGenRef.current) cleanupFn(store);
+            });
+          }
+        };
+      }, []);
+
       useEffect(() => {
         if (!fetchFn) { return; }
         let cancelled = false;
@@ -149,20 +171,6 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
             }
           });
         return () => { cancelled = true; };
-      }, []);
-
-      const cleanupCalledRef = useRef(false);
-      useEffect(() => {
-        cleanupCalledRef.current = false;
-        if (!cleanupFn) return;
-        return () => {
-          if (!cleanupCalledRef.current) {
-            cleanupCalledRef.current = true;
-            queueMicrotask(() => {
-              if (cleanupCalledRef.current) cleanupFn(store);
-            });
-          }
-        };
       }, []);
 
       if (fetchFn) {

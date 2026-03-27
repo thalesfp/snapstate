@@ -190,18 +190,19 @@ const UserCard = userStore.connect(CardView, {
 
 `pick(path)` subscribes to that exact path — the component only re-renders when those specific values change.
 
-**Cleanup** — run teardown when the component disconnects:
+**Setup and cleanup** — lifecycle hooks that pair with `fetch`:
 
 ```tsx
 const Dashboard = dashboardStore.connect(DashboardView, {
   props: (s) => ({ stats: s.state.get("stats") }),
+  setup: (s) => s.initPolling(),
   fetch: (s) => s.loadStats(),
-  cleanup: (s) => s.resetStats(),
+  cleanup: (s) => s.stopPolling(),
   loading: () => <Skeleton />,
 });
 ```
 
-`cleanup` fires once on unmount. It works with or without `fetch` — use it to abort requests, clear timers, or reset store state. Safe in React StrictMode.
+`setup` runs synchronously before `fetch` — use it to initialize timers, subscriptions, or AbortControllers. `cleanup` fires once on unmount. Both work with or without `fetch` and are safe in React StrictMode.
 
 ## Form Store — `SnapFormStore<V, K>`
 
