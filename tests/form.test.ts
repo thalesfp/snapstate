@@ -1032,4 +1032,45 @@ describe("SnapFormStore", () => {
       expect(form.getValue("name")).toBe("");
     });
   });
+
+  describe("range input support", () => {
+    const rangeSchema = z.object({ volume: z.number().min(0).max(100) });
+    type RangeValues = z.infer<typeof rangeSchema>;
+
+    it("reads numeric value from range input", () => {
+      const f = new SnapFormStore<RangeValues>(rangeSchema, { volume: 50 });
+      const reg = f.register("volume");
+      expect(reg.defaultValue).toBe("50");
+      const el = document.createElement("input");
+      el.type = "range";
+      reg.ref(el);
+      el.value = "75";
+      expect(f.getValue("volume")).toBe(75);
+    });
+
+    it("setValue updates range input DOM value", () => {
+      const f = new SnapFormStore<RangeValues>(rangeSchema, { volume: 50 });
+      const reg = f.register("volume");
+      const el = document.createElement("input");
+      el.type = "range";
+      reg.ref(el);
+      f.setValue("volume", 30);
+      expect(el.value).toBe("30");
+    });
+
+    it("validates range via schema on blur", () => {
+      const strictSchema = z.object({ volume: z.number().min(10).max(90) });
+      type StrictValues = z.infer<typeof strictSchema>;
+      const f = new SnapFormStore<StrictValues>(strictSchema, { volume: 50 }, {
+        validationMode: "onBlur",
+      });
+      const reg = f.register("volume");
+      const el = document.createElement("input");
+      el.type = "range";
+      reg.ref(el);
+      el.value = "0";
+      reg.onBlur();
+      expect(f.errors.volume).toBeDefined();
+    });
+  });
 });
