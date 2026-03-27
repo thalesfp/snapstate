@@ -50,6 +50,20 @@ Snapstate is a reactive state library. State changes are tracked via **dot-separ
 
 - **No `useEffect`/`useState` for consumers**: snapstate's React integration (`connect`) should handle data fetching and state sync so end users never need `useEffect` or `useState` for store-related logic. `useState` is acceptable only for purely UI-local behavior (e.g. toggle a dropdown).
 
+## Example App
+
+A full-featured Vite + React 19 demo app lives in `example/` (todos, auth, account profile).
+
+```bash
+npm run build                  # Build library first (example resolves ../dist/)
+cd example && npm install      # Install example dependencies (first time)
+npm run example:dev            # Start dev server + mock API
+npm run example:test           # Run example unit tests
+npm run example:test:e2e       # Run Playwright e2e tests
+```
+
+The example resolves `snapstate`, `snapstate/react`, and `snapstate/form` via Vite aliases and tsconfig paths pointing to `../dist/`. Always rebuild the library (`npm run build`) after changing library source.
+
 ## Testing
 
 Vitest with jsdom environment. Tests use `vi.fn()` for spies, `@testing-library/react` + `act()` for React tests. Globals enabled (no need to import `describe`/`it`/`expect`).
