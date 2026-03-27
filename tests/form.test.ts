@@ -971,4 +971,65 @@ describe("SnapFormStore", () => {
       expect(f.errors).toEqual({});
     });
   });
+
+  describe("textarea support", () => {
+    it("register accepts a textarea ref and reads its value", () => {
+      const reg = form.register("name");
+      const el = document.createElement("textarea");
+      reg.ref(el);
+      el.value = "from textarea";
+      expect(form.getValue("name")).toBe("from textarea");
+    });
+
+    it("setValue writes to textarea DOM value", () => {
+      const reg = form.register("name");
+      const el = document.createElement("textarea");
+      reg.ref(el);
+      form.setValue("name", "pushed");
+      expect(el.value).toBe("pushed");
+    });
+
+    it("onBlur syncs textarea value to state", () => {
+      const reg = form.register("name");
+      const el = document.createElement("textarea");
+      reg.ref(el);
+      el.value = "blurred";
+      reg.onBlur();
+      expect(form.values.name).toBe("blurred");
+    });
+
+    it("onChange triggers validation in onChange mode", () => {
+      const changeForm = new TestForm(schema, { name: "", email: "" }, {
+        validationMode: "onChange",
+      });
+      const reg = changeForm.register("email");
+      const el = document.createElement("textarea");
+      reg.ref(el);
+      el.value = "bad";
+      reg.onChange();
+      expect(changeForm.errors.email).toBeDefined();
+    });
+
+    it("getValues includes textarea values", () => {
+      const nameReg = form.register("name");
+      const emailReg = form.register("email");
+      const nameEl = document.createElement("textarea");
+      const emailEl = document.createElement("input");
+      nameReg.ref(nameEl);
+      emailReg.ref(emailEl);
+      nameEl.value = "textarea name";
+      emailEl.value = "input@test.com";
+      expect(form.getValues()).toEqual({ name: "textarea name", email: "input@test.com" });
+    });
+
+    it("ref removal stops reading from textarea", () => {
+      const reg = form.register("name");
+      const el = document.createElement("textarea");
+      reg.ref(el);
+      el.value = "present";
+      expect(form.getValue("name")).toBe("present");
+      reg.ref(null);
+      expect(form.getValue("name")).toBe("");
+    });
+  });
 });
