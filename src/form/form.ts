@@ -9,6 +9,8 @@ export interface FormConfig {
   validationMode: ValidationMode;
 }
 
+export type FormElement = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+
 export type FormErrors<V> = { [K in keyof V]?: string[] };
 
 export interface FormState<V extends Record<string, unknown>> {
@@ -66,7 +68,7 @@ export class SnapFormStore<
   private schema: z.ZodTypeAny;
   private objectSchema: z.ZodObject<any> | null;
   private formConfig: FormConfig;
-  private _refs: Map<string, HTMLInputElement | HTMLSelectElement> = new Map();
+  private _refs: Map<string, FormElement> = new Map();
 
   constructor(
     schema: z.ZodTypeAny,
@@ -111,7 +113,7 @@ export class SnapFormStore<
   }
 
   register(field: keyof V & string): {
-    ref: (el: HTMLInputElement | HTMLSelectElement | null) => void;
+    ref: (el: FormElement | null) => void;
     name: string;
     defaultValue?: string;
     defaultChecked?: boolean;
@@ -121,13 +123,14 @@ export class SnapFormStore<
     const value = this.state.get(`values.${field}` as any);
     const isBool = this.getFieldType(field) === "boolean";
     return {
-      ref: (el: HTMLInputElement | HTMLSelectElement | null) => {
+      ref: (el: FormElement | null) => {
         if (el) this._refs.set(field, el);
         else this._refs.delete(field);
       },
       name: field,
-      defaultValue: isBool ? undefined! : String(value ?? ""),
-      ...(isBool ? { defaultChecked: Boolean(value) } : {}),
+      ...(isBool
+        ? { defaultChecked: Boolean(value) }
+        : { defaultValue: String(value ?? "") }),
       onBlur: () => {
         this.syncRefToState(field);
         this.handleBlur(field);
@@ -287,7 +290,7 @@ export class SnapFormStore<
     return "string";
   }
 
-  private coerceRefValue(field: string, el: HTMLInputElement | HTMLSelectElement): unknown {
+  private coerceRefValue(field: string, el: FormElement): unknown {
     const typ = this.getFieldType(field);
     if (typ === "number") { return el.value === "" ? NaN : Number(el.value); }
     if (typ === "boolean") { return (el as HTMLInputElement).checked; }
