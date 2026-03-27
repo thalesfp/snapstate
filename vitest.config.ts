@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
+    include: ["tests/**/*.test.ts"],
   },
   bench: {
     include: ["tests/bench.bench.ts"],
