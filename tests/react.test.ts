@@ -454,6 +454,274 @@ describe("connect with select", () => {
   });
 });
 
+describe("connect with select + fetch", () => {
+  interface NestedState {
+    user: { name: string; avatar: string };
+    settings: { theme: string };
+  }
+
+  class NestedStore extends SnapStore<NestedState> {
+    constructor() {
+      super({ user: { name: "Alice", avatar: "a.png" }, settings: { theme: "dark" } });
+    }
+
+    setName(n: string) {
+      this.state.set("user.name", n);
+    }
+
+    setTheme(t: string) {
+      this.state.set("settings.theme", t);
+    }
+  }
+
+  it("transitions through idle -> loading -> ready with selected props", async () => {
+    const store = new NestedStore();
+
+    function Display({
+      name,
+      status,
+      error,
+    }: {
+      name: string;
+      status: AsyncStatus;
+      error: string | null;
+    }) {
+      return createElement(
+        "div",
+        null,
+        createElement("span", { "data-testid": "status" }, status.value),
+        createElement("span", { "data-testid": "name" }, name),
+      );
+    }
+
+    let resolveFetch!: () => void;
+    const fetchPromise = new Promise<void>((r) => {
+      resolveFetch = r;
+    });
+
+    const Connected = store.connect(Display, {
+      select: (pick) => ({ name: pick("user.name") }),
+      fetch: async () => {
+        await fetchPromise;
+      },
+    });
+
+    render(createElement(Connected));
+
+    expect(screen.getByTestId("status").textContent).toBe("loading");
+    expect(screen.getByTestId("name").textContent).toBe("Alice");
+
+    await actTL(async () => {
+      resolveFetch();
+    });
+
+    expect(screen.getByTestId("status").textContent).toBe("ready");
+  });
+
+  it("renders loading component during fetch", async () => {
+    const store = new NestedStore();
+
+    function Display({ name }: { name: string }) {
+      return createElement("span", { "data-testid": "val" }, name);
+    }
+
+    function Loading() {
+      return createElement("span", { "data-testid": "loading" }, "Loading...");
+    }
+
+    let resolveFetch!: () => void;
+    const fetchPromise = new Promise<void>((r) => {
+      resolveFetch = r;
+    });
+
+    const Connected = store.connect(Display, {
+      select: (pick) => ({ name: pick("user.name") }),
+      fetch: async () => {
+        await fetchPromise;
+      },
+      loading: Loading,
+    });
+
+    render(createElement(Connected));
+
+    expect(screen.getByTestId("loading").textContent).toBe("Loading...");
+    expect(screen.queryByTestId("val")).toBeNull();
+
+    await actTL(async () => {
+      resolveFetch();
+    });
+
+    expect(screen.queryByTestId("loading")).toBeNull();
+    expect(screen.getByTestId("val").textContent).toBe("Alice");
+  });
+
+  it("renders error component on fetch failure", async () => {
+    const store = new NestedStore();
+
+    function Display({ name }: { name: string }) {
+      return createElement("span", { "data-testid": "val" }, name);
+    }
+
+    function ErrorDisplay({ error }: { error: string }) {
+      return createElement("span", { "data-testid": "error" }, error);
+    }
+
+    const Connected = store.connect(Display, {
+      select: (pick) => ({ name: pick("user.name") }),
+      fetch: async () => {
+        throw new Error("fail");
+      },
+      loading: () => createElement("span", { "data-testid": "loading" }, "Loading..."),
+      error: ErrorDisplay,
+    });
+
+    render(createElement(Connected));
+
+    expect(screen.getByTestId("loading")).toBeTruthy();
+
+    await actTL(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(screen.getByTestId("error").textContent).toBe("fail");
+    expect(screen.queryByTestId("val")).toBeNull();
+  });
+
+  it("falls back to wrapped component when loading/error not provided", async () => {
+    const store = new NestedStore();
+
+    function Display({
+      name,
+      status,
+    }: {
+      name: string;
+      status: AsyncStatus;
+    }) {
+      return createElement(
+        "div",
+        null,
+        createElement("span", { "data-testid": "status" }, status.value),
+        createElement("span", { "data-testid": "name" }, name),
+      );
+    }
+
+    let resolveFetch!: () => void;
+    const fetchPromise = new Promise<void>((r) => {
+      resolveFetch = r;
+    });
+
+    const Connected = store.connect(Display, {
+      select: (pick) => ({ name: pick("user.name") }),
+      fetch: async () => {
+        await fetchPromise;
+      },
+    });
+
+    render(createElement(Connected));
+
+    expect(screen.getByTestId("status").textContent).toBe("loading");
+    expect(screen.getByTestId("name").textContent).toBe("Alice");
+
+    await actTL(async () => {
+      resolveFetch();
+    });
+
+    expect(screen.getByTestId("status").textContent).toBe("ready");
+  });
+
+  it("selected props still have granular reactivity during ready state", async () => {
+    const store = new NestedStore();
+    let renderCount = 0;
+
+    function Display({ name }: { name: string }) {
+      renderCount++;
+      return createElement("span", { "data-testid": "val" }, name);
+    }
+
+    const Connected = store.connect(Display, {
+      select: (pick) => ({ name: pick("user.name") }),
+      fetch: async () => {},
+    });
+
+    render(createElement(Connected));
+    await actTL(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    const rendersAfterReady = renderCount;
+
+    await actTL(async () => {
+      store.setTheme("light");
+    });
+    expect(renderCount).toBe(rendersAfterReady);
+
+    await actTL(async () => {
+      store.setName("Bob");
+    });
+    expect(screen.getByTestId("val").textContent).toBe("Bob");
+  });
+
+  it("setup fires on mount with select config", async () => {
+    const store = new NestedStore();
+    const setupSpy = vi.fn();
+
+    function Display({ name }: { name: string }) {
+      return createElement("span", { "data-testid": "val" }, name);
+    }
+
+    const Connected = store.connect(Display, {
+      select: (pick) => ({ name: pick("user.name") }),
+      setup: setupSpy,
+    });
+
+    render(createElement(Connected));
+    await actTL(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(setupSpy).toHaveBeenCalledOnce();
+  });
+
+  it("cleanup fires on unmount with select config", async () => {
+    const store = new NestedStore();
+    const cleanupSpy = vi.fn();
+
+    function Display({ name }: { name: string }) {
+      return createElement("span", { "data-testid": "val" }, name);
+    }
+
+    const Connected = store.connect(Display, {
+      select: (pick) => ({ name: pick("user.name") }),
+      cleanup: cleanupSpy,
+    });
+
+    const { unmount } = render(createElement(Connected));
+    expect(cleanupSpy).not.toHaveBeenCalled();
+    unmount();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(cleanupSpy).toHaveBeenCalledOnce();
+  });
+
+  it("setup runs before fetch with select config", async () => {
+    const store = new NestedStore();
+    const order: string[] = [];
+
+    function Display({ name }: { name: string }) {
+      return createElement("span", { "data-testid": "val" }, name);
+    }
+
+    const Connected = store.connect(Display, {
+      select: (pick) => ({ name: pick("user.name") }),
+      setup: () => { order.push("setup"); },
+      fetch: async () => { order.push("fetch"); },
+    });
+
+    render(createElement(Connected));
+    await actTL(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(order).toEqual(["setup", "fetch"]);
+  });
+});
+
 describe("connect with fetch", () => {
   it("transitions through idle -> loading -> ready", async () => {
     const store = new TestStore();

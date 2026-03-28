@@ -1,26 +1,28 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { accountStore } from "../../stores";
+import type { OperationState } from "snapstate/react";
 
 function ProfilePageInner({
   nameError,
   emailError,
   themeError,
-  isUpdating,
+  submitStatus,
 }: {
   nameError: string[] | undefined;
   emailError: string[] | undefined;
   themeError: string[] | undefined;
-  isUpdating: boolean;
+  submitStatus: OperationState;
 }) {
   const [success, setSuccess] = useState(false);
+  const isUpdating = submitStatus.status.isLoading;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSuccess(false);
-    
+
     await accountStore.updateProfile();
-    
+
     setSuccess(true);
   };
 
@@ -64,12 +66,12 @@ function ProfilePageInner({
 }
 
 export const ProfilePage = accountStore.connect(ProfilePageInner, {
-  props: (s) => ({
-    nameError: s.errors.name,
-    emailError: s.errors.email,
-    themeError: s.errors.theme,
-    isUpdating: s.state.get("submitStatus").status.isLoading,
+  select: (pick) => ({
+    nameError: pick("errors.name"),
+    emailError: pick("errors.email"),
+    themeError: pick("errors.theme"),
+    submitStatus: pick("submitStatus"),
   }),
-  setup: (s) => s.loadCurrentProfile(),
-  cleanup: (s) => s.reset(),
+  setup: (s) => { s.loadCurrentProfile(); },
+  cleanup: (s) => { s.reset(); },
 });
