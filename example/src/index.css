@@ -124,6 +124,19 @@ h1 {
   flex-shrink: 0;
 }
 
+.detail-link {
+  color: #ccc;
+  font-size: 18px;
+  text-decoration: none;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.detail-link:hover {
+  color: #e74c3c;
+}
+
 .delete-btn {
   background: none;
   border: none;
@@ -426,6 +439,60 @@ h1 {
 .profile-success {
   color: #27ae60;
   font-size: 14px;
+}
+
+.todo-detail {
+  max-width: 500px;
+  margin: 40px auto;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 24px;
+}
+
+.todo-detail-title {
+  font-size: 22px;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.todo-detail-status {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.todo-detail-status.active {
+  background: #fef3e7;
+  color: #e67e22;
+}
+
+.todo-detail-status.completed {
+  background: #eafaf1;
+  color: #27ae60;
+}
+
+.todo-detail-back {
+  display: block;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+  color: #888;
+  font-size: 14px;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.todo-detail-back:hover {
+  color: #e74c3c;
+}
+
+.todo-detail-error {
+  color: #e74c3c;
+  font-size: 14px;
+  margin-bottom: 12px;
 }
 
 .loading-spinner {

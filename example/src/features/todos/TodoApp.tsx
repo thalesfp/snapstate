@@ -19,7 +19,7 @@ function TodoAppInner() {
 }
 
 export const TodoApp = todoStore.connect(TodoAppInner, {
-  props: () => ({}),
+  select: () => ({}),
   fetch: (store) => store.fetchTodos(),
   cleanup: (store) => store.setFilter("all"),
   loading: () => <div className="app"><div className="loading-spinner" /></div>,

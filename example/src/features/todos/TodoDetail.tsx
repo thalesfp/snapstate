@@ -11,23 +11,32 @@ interface TodoDetailViewProps {
 }
 
 const TodoDetailView = ({ todo, status, error }: TodoDetailViewProps) => {
-  if (status.isIdle || status.isLoading) {
-    return <p>Loading...</p>;
-  }
+  const loading = status.isIdle || status.isLoading;
 
-  if (status.isError) {
-    return <p>Error: {error}</p>;
-  }
-
-  if (!todo) {
-    return <p>Todo not found</p>;
-  }
+  const content = (() => {
+    if (loading) {
+      return <div className="loading-spinner" />;
+    }
+    if (status.isError) {
+      return <p className="todo-detail-error">Error: {error}</p>;
+    }
+    if (!todo) {
+      return <p className="empty-message">Todo not found</p>;
+    }
+    return (
+      <>
+        <h2 className="todo-detail-title">{todo.text}</h2>
+        <span className={`todo-detail-status ${todo.completed ? "completed" : "active"}`}>
+          {todo.completed ? "Completed" : "Active"}
+        </span>
+      </>
+    );
+  })();
 
   return (
     <div className="todo-detail">
-      <h2>{todo.text}</h2>
-      <p>Status: {todo.completed ? "Completed" : "Active"}</p>
-      <Link to="/todos">&larr; Back to list</Link>
+      {content}
+      {!loading && <Link className="todo-detail-back" to="/todos">&larr; Back to list</Link>}
     </div>
   );
 };

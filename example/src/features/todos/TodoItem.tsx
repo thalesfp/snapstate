@@ -60,12 +60,14 @@ export function TodoItemInner({ todo, editState }: TodoItemProps) {
           autoFocus
         />
       ) : (
-        <span className="todo-text" onDoubleClick={() => setEditing(true)}>
-          {todo.text}
-        </span>
-        <Link className="detail-link" to={`/todos/${todo.id}`}>
-          ›
-        </Link>
+        <>
+          <span className="todo-text" onDoubleClick={() => setEditing(true)}>
+            {todo.text}
+          </span>
+          <Link className="detail-link" to={`/todos/${todo.id}`}>
+            ›
+          </Link>
+        </>
       )}
       {saving ? (
         <span className="save-spinner" />
