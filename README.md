@@ -130,6 +130,7 @@ Options: `{ body?, headers?, onSuccess?(data)?, onError?(error)? }`
 | `subscribe(path, callback)` | Subscribe to a specific path |
 | `getSnapshot()` | Current state (compatible with `useSyncExternalStore`) |
 | `getStatus(key)` | Async status: `{ status: AsyncStatus, error: string \| null }` |
+| `resetStatus(key?)` | Reset operation status to `idle`. Without a key, resets all operations |
 | `destroy()` | Tear down subscriptions |
 
 ### Custom HTTP Client
@@ -215,7 +216,21 @@ const Dashboard = dashboardStore.connect(DashboardView, {
 });
 ```
 
-`setup` runs synchronously before `fetch` — use it to initialize timers, subscriptions, or AbortControllers. `cleanup` fires once on unmount. Both work with or without `fetch` and are safe in React StrictMode.
+`setup` runs synchronously before `fetch` -- use it to initialize timers, subscriptions, or AbortControllers. `cleanup` fires once on unmount. Both work with or without `fetch` and are safe in React StrictMode.
+
+**Dependencies** -- re-run `fetch`/`setup`/`cleanup` when props change:
+
+```tsx
+const ProjectDetail = projectStore.connect(ProjectView, {
+  props: (s) => ({ project: s.state.get("project") }),
+  fetch: (s, props) => s.fetchProject(props.id),
+  cleanup: (s) => s.reset(),
+  deps: (props) => [props.id],
+  loading: () => <Skeleton />,
+});
+```
+
+`deps` receives the component's own props and returns a dependency array. When any value in the array changes, `cleanup` runs for the previous deps, then `fetch` and `setup` re-run with the new props. Without `deps`, lifecycle callbacks run once on mount (the default). `fetch`, `setup`, and `cleanup` all receive the component's own props as a second argument.
 
 ## Form Store — `SnapFormStore<V, K>`
 
@@ -334,7 +349,7 @@ The source accepts any `Subscribable` (every `SnapStore` satisfies this), so sto
 
 **Auto-batching** — Multiple synchronous `set()` calls queue a single notification via `queueMicrotask()`. Use `batch()` for explicit control.
 
-**Async status tracking** — Every `api.*` call is keyed. `getStatus(key)` returns `{ status, error }` where status has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`.
+**Async status tracking** -- Every `api.*` call is keyed. `getStatus(key)` returns `{ status, error }` where status has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`. Call `resetStatus(key)` to return an operation to `idle`, distinguishing "never loaded" from "loaded empty".
 
 ## Example App
 
