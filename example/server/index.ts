@@ -137,6 +137,16 @@ app.use("/api/todos", async (c, next) => {
 
 // --- Todo routes ---
 
+app.get("/api/todos/:id", async (c) => {
+  const user = c.get("user" as never) as unknown as User;
+  const id = c.req.param("id");
+  const data = getUserTodos(user.id);
+  const todo = data.todos.find((t) => t.id === id);
+  if (!todo) { return c.json({ error: "Not found" }, 404); }
+  await delay(300);
+  return c.json(todo);
+});
+
 app.get("/api/todos", async (c) => {
   const user = c.get("user" as never) as unknown as User;
   const data = getUserTodos(user.id);

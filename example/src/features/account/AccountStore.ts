@@ -14,6 +14,7 @@ type ProfileValues = z.infer<typeof profileSchema>;
 
 export class AccountStore extends SnapFormStore<ProfileValues, "update"> {
   private auth: AuthStore;
+  private resetTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(authStore: AuthStore) {
     super(profileSchema, { name: "", email: "", notifications: false, theme: "system" }, { validationMode: "onBlur" });
@@ -26,7 +27,9 @@ export class AccountStore extends SnapFormStore<ProfileValues, "update"> {
 
   loadCurrentProfile() {
     const user = this.auth.user;
-    if (user) this.loadProfile(user);
+    if (user) {
+      this.loadProfile(user);
+    }
   }
 
   updateProfile() {
@@ -44,6 +47,13 @@ export class AccountStore extends SnapFormStore<ProfileValues, "update"> {
         });
         this.auth.setUser(result.user);
         this.auth.setToken(result.token);
+        if (this.resetTimer) {
+          clearTimeout(this.resetTimer);
+        }
+        this.resetTimer = setTimeout(() => {
+          this.resetTimer = null;
+          this.resetStatus("update");
+        }, 2000);
       },
     });
   }
