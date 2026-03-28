@@ -186,6 +186,114 @@ describe("setHttpClient export", () => {
   });
 });
 
+describe("resetStatus", () => {
+  class TestStore extends SnapStore<{ value: string }, "load" | "save"> {
+    doFetch(key: "load" | "save", fn: () => Promise<void>) {
+      return this.api.fetch(key, fn);
+    }
+  }
+
+  it("resets a single operation back to idle", async () => {
+    const store = new TestStore({ value: "" });
+    await store.doFetch("load", async () => {});
+    expect(store.getStatus("load").status.isReady).toBe(true);
+
+    store.resetStatus("load");
+    expect(store.getStatus("load").status.isIdle).toBe(true);
+    expect(store.getStatus("load").error).toBeNull();
+  });
+
+  it("resets all operations when called without a key", async () => {
+    const store = new TestStore({ value: "" });
+    await store.doFetch("load", async () => {});
+    await store.doFetch("save", async () => {});
+    expect(store.getStatus("load").status.isReady).toBe(true);
+    expect(store.getStatus("save").status.isReady).toBe(true);
+
+    store.resetStatus();
+    expect(store.getStatus("load").status.isIdle).toBe(true);
+    expect(store.getStatus("save").status.isIdle).toBe(true);
+  });
+
+  it("notifies subscribers on reset", async () => {
+    const store = new TestStore({ value: "" });
+    await store.doFetch("load", async () => {});
+
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    store.resetStatus("load");
+    expect(listener).toHaveBeenCalled();
+  });
+
+  it("does not notify when resetting a key that was never used", () => {
+    const store = new TestStore({ value: "" });
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    store.resetStatus("load");
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("does not notify when clearing already-empty operations", () => {
+    const store = new TestStore({ value: "" });
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    store.resetStatus();
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("reset during in-flight fetch causes fetch to be silently ignored", async () => {
+    const store = new TestStore({ value: "" });
+    let resolve!: () => void;
+
+    const fetchPromise = store.doFetch("load", () => new Promise<void>((r) => { resolve = r; }));
+    expect(store.getStatus("load").status.isLoading).toBe(true);
+
+    store.resetStatus("load");
+    expect(store.getStatus("load").status.isIdle).toBe(true);
+
+    resolve();
+    await fetchPromise;
+    expect(store.getStatus("load").status.isIdle).toBe(true);
+  });
+
+  it("stale request does not overwrite new request after reset", async () => {
+    const store = new TestStore({ value: "" });
+    let resolveOld!: () => void;
+    let resolveNew!: () => void;
+
+    const oldFetch = store.doFetch("load", () => new Promise<void>((r) => { resolveOld = r; }));
+    store.resetStatus("load");
+    const newFetch = store.doFetch("load", () => new Promise<void>((r) => { resolveNew = r; }));
+    expect(store.getStatus("load").status.isLoading).toBe(true);
+
+    resolveOld();
+    await oldFetch;
+    expect(store.getStatus("load").status.isLoading).toBe(true);
+
+    resolveNew();
+    await newFetch;
+    expect(store.getStatus("load").status.isReady).toBe(true);
+  });
+
+  it("allows a fresh fetch cycle after reset", async () => {
+    const store = new TestStore({ value: "" });
+    await store.doFetch("load", async () => {});
+    expect(store.getStatus("load").status.isReady).toBe(true);
+
+    store.resetStatus("load");
+    expect(store.getStatus("load").status.isIdle).toBe(true);
+
+    const fetchPromise = store.doFetch("load", async () => {});
+    expect(store.getStatus("load").status.isLoading).toBe(true);
+
+    await fetchPromise;
+    expect(store.getStatus("load").status.isReady).toBe(true);
+  });
+});
+
 describe("SnapStore async race condition", () => {
   class TestStore extends SnapStore<{ value: string }, "op"> {
     doFetch(key: "op", fn: () => Promise<void>) {

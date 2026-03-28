@@ -218,6 +218,27 @@ export class SnapStore<T extends object, K extends string = string> {
     return { ...(this._operations.get(key) ?? IDLE_STATE) };
   }
 
+  /** Reset operation status to `idle`. With a key, resets that operation; without, resets all. */
+  resetStatus(key?: K): void {
+    if (key !== undefined) {
+      if (!this._operations.has(key)) {
+        return;
+      }
+      this._operations.delete(key);
+      const gen = (this._generations.get(key) ?? 0) + 1;
+      this._generations.set(key, gen);
+    } else {
+      if (this._operations.size === 0) {
+        return;
+      }
+      this._operations.clear();
+      for (const k of this._generations.keys()) {
+        this._generations.set(k, (this._generations.get(k) ?? 0) + 1);
+      }
+    }
+    this._store.notify();
+  }
+
   /** Keep a local state key in sync with a value selected from an external store. Cleaned up on `destroy()`. */
   protected derive<S extends object, P extends DotPaths<T> & string>(
     localKey: P,
