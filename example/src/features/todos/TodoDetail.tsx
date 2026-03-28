@@ -34,7 +34,7 @@ const TodoDetailView = ({ todo, status, error }: TodoDetailViewProps) => {
 
 export const TodoDetail = todoDetailStore.connect(TodoDetailView, {
   select: (pick) => ({ todo: pick("todo") }),
-  fetch: (s, props) => s.fetchTodo(String(props.id)),
+  fetch: (s, props) => s.fetchTodo(props.id),
   cleanup: (s) => s.reset(),
   deps: (props) => [props.id],
 });
