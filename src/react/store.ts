@@ -28,8 +28,105 @@ interface ConnectPropsConfig<S, MappedProps> {
 
 type PickFn<T extends object> = <P extends DotPaths<T>>(path: P) => GetByPath<T, P>;
 
-interface SelectConnectConfig<T extends object, MappedProps> {
+interface SelectConnectConfig<T extends object, S, MappedProps> {
   select: (pick: PickFn<T>) => MappedProps;
+  fetch?: (store: S) => Promise<void>;
+  setup?: (store: S) => void;
+  cleanup?: (store: S) => void;
+  loading?: React.ComponentType;
+  error?: React.ComponentType<{ error: string }>;
+}
+
+interface SelectFetchConnectConfig<T extends object, S, MappedProps> extends SelectConnectConfig<T, S, MappedProps> {
+  fetch: (store: S) => Promise<void>;
+}
+
+interface FetchConfig<S> {
+  fetchFn?: (store: S) => Promise<void>;
+  loadingComponent?: React.ComponentType;
+  errorComponent?: React.ComponentType<{ error: string }>;
+}
+
+interface FetchState {
+  status: AsyncStatus;
+  error: string | null;
+}
+
+const idleFetchState: FetchState = { status: asyncStatus("idle"), error: null };
+
+function useFetchLifecycle<S>(store: S, config: FetchConfig<S>): FetchState {
+  const { fetchFn } = config;
+
+  const [asyncState, setAsyncState] = useState<FetchState>(idleFetchState);
+  const fetchGenRef = useRef(0);
+
+  useEffect(() => {
+    if (!fetchFn) { return; }
+    let cancelled = false;
+    const gen = ++fetchGenRef.current;
+    setAsyncState({ status: asyncStatus("loading"), error: null });
+    Promise.resolve()
+      .then(() => {
+        if (cancelled) { return; }
+        return fetchFn(store);
+      })
+      .then(() => {
+        if (gen === fetchGenRef.current) {
+          setAsyncState({ status: asyncStatus("ready"), error: null });
+        }
+      })
+      .catch((e) => {
+        if (gen === fetchGenRef.current) {
+          setAsyncState({
+            status: asyncStatus("error"),
+            error: e instanceof Error ? e.message : "Unknown error",
+          });
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  return asyncState;
+}
+
+function renderFetchGuard<S>(
+  asyncState: FetchState,
+  config: FetchConfig<S>,
+): React.ReactElement | null {
+  const { fetchFn, loadingComponent, errorComponent } = config;
+  if (!fetchFn) { return null; }
+  if (loadingComponent && (asyncState.status.isIdle || asyncState.status.isLoading)) {
+    return createElement(loadingComponent);
+  }
+  if (errorComponent && asyncState.status.isError) {
+    return createElement(errorComponent, { error: asyncState.error ?? "Unknown error" });
+  }
+  return null;
+}
+
+function useLifecycle<S>(
+  store: S,
+  setupFn: ((store: S) => void) | undefined,
+  cleanupFn: ((store: S) => void) | undefined,
+): void {
+  const lifecycleGenRef = useRef(0);
+  useEffect(() => {
+    if (!setupFn && !cleanupFn) { return; }
+    const gen = ++lifecycleGenRef.current;
+    if (setupFn) {
+      queueMicrotask(() => {
+        if (gen === lifecycleGenRef.current) { setupFn(store); }
+      });
+    }
+    return () => {
+      const teardownGen = lifecycleGenRef.current;
+      if (cleanupFn) {
+        queueMicrotask(() => {
+          if (teardownGen === lifecycleGenRef.current) { cleanupFn(store); }
+        });
+      }
+    };
+  }, []);
 }
 
 function shallowEqual(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
@@ -62,12 +159,17 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
     Component: React.ComponentType<P>,
     config: ConnectPropsConfig<this, MappedProps>,
   ): React.FC<Omit<P, keyof MappedProps>>;
+  /** Wire a component with granular `select` subscriptions plus async `fetch` for mount-time init. */
+  connect<P extends object, MappedProps extends Record<string, unknown>>(
+    Component: React.ComponentType<P>,
+    config: SelectFetchConnectConfig<T, this, MappedProps>,
+  ): React.FC<Omit<P, keyof MappedProps | "status" | "error">>;
   /** Wire a component to the store with granular path-based subscriptions via `select`.
    *  Paths are captured once at connect-time — select must use a stable set of paths.
    *  For conditional/dynamic path selection, use the `mapToProps` overload instead. */
   connect<P extends object, MappedProps extends Record<string, unknown>>(
     Component: React.ComponentType<P>,
-    config: SelectConnectConfig<T, MappedProps>,
+    config: SelectConnectConfig<T, this, MappedProps>,
   ): React.FC<Omit<P, keyof MappedProps>>;
   connect<P extends object, MappedProps extends Record<string, unknown>>(
     Component: React.ComponentType<P>,
@@ -75,12 +177,12 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       | ((store: this) => MappedProps)
       | ConnectPropsConfig<this, MappedProps>
       | ConnectConfig<this, MappedProps>
-      | SelectConnectConfig<T, MappedProps>,
+      | SelectConnectConfig<T, this, MappedProps>,
   ): React.FC<Omit<P, keyof MappedProps>> {
     const store = this;
 
     if (typeof configOrMapper === "object" && "select" in configOrMapper) {
-      return this._connectWithSelect<P, MappedProps>(Component, configOrMapper.select);
+      return this._connectWithSelect<P, MappedProps>(Component, configOrMapper);
     }
 
     const config = typeof configOrMapper === "function"
@@ -121,66 +223,13 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
 
       const mappedProps = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-      const [asyncState, setAsyncState] = useState<{
-        status: AsyncStatus;
-        error: string | null;
-      }>({ status: asyncStatus("idle"), error: null });
+      useLifecycle(store, setupFn, cleanupFn);
 
-      const fetchGenRef = useRef(0);
+      const fetchConfig: FetchConfig<typeof store> = { fetchFn, loadingComponent, errorComponent };
+      const asyncState = useFetchLifecycle(store, fetchConfig);
 
-      const lifecycleGenRef = useRef(0);
-      useEffect(() => {
-        if (!setupFn && !cleanupFn) return;
-        const gen = ++lifecycleGenRef.current;
-        if (setupFn) {
-          queueMicrotask(() => {
-            if (gen === lifecycleGenRef.current) setupFn(store);
-          });
-        }
-        return () => {
-          const teardownGen = lifecycleGenRef.current;
-          if (cleanupFn) {
-            queueMicrotask(() => {
-              if (teardownGen === lifecycleGenRef.current) cleanupFn(store);
-            });
-          }
-        };
-      }, []);
-
-      useEffect(() => {
-        if (!fetchFn) { return; }
-        let cancelled = false;
-        const gen = ++fetchGenRef.current;
-        setAsyncState({ status: asyncStatus("loading"), error: null });
-        Promise.resolve()
-          .then(() => {
-            if (cancelled) { return; }
-            return fetchFn(store);
-          })
-          .then(() => {
-            if (gen === fetchGenRef.current) {
-              setAsyncState({ status: asyncStatus("ready"), error: null });
-            }
-          })
-          .catch((e) => {
-            if (gen === fetchGenRef.current) {
-              setAsyncState({
-                status: asyncStatus("error"),
-                error: e instanceof Error ? e.message : "Unknown error",
-              });
-            }
-          });
-        return () => { cancelled = true; };
-      }, []);
-
-      if (fetchFn) {
-        if (loadingComponent && (asyncState.status.isIdle || asyncState.status.isLoading)) {
-          return createElement(loadingComponent);
-        }
-        if (errorComponent && asyncState.status.isError) {
-          return createElement(errorComponent, { error: asyncState.error! });
-        }
-      }
+      const guard = renderFetchGuard(asyncState, fetchConfig);
+      if (guard) { return guard; }
 
       return createElement(Component, {
         ...ownProps,
@@ -196,9 +245,15 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
 
   private _connectWithSelect<P extends object, MappedProps extends Record<string, unknown>>(
     Component: React.ComponentType<P>,
-    selectFn: (pick: PickFn<T>) => MappedProps,
+    config: SelectConnectConfig<T, this, MappedProps>,
   ): React.FC<Omit<P, keyof MappedProps>> {
     const store = this;
+    const selectFn = config.select;
+    const fetchFn = config.fetch;
+    const setupFn = config.setup;
+    const cleanupFn = config.cleanup;
+    const loadingComponent = config.loading;
+    const errorComponent = config.error;
 
     const resolvePathValue = (path: string): any => {
       const segments = path.split(".");
@@ -255,9 +310,18 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
 
       const mappedProps = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
+      useLifecycle(store, setupFn, cleanupFn);
+
+      const fetchConfig: FetchConfig<typeof store> = { fetchFn, loadingComponent, errorComponent };
+      const asyncState = useFetchLifecycle(store, fetchConfig);
+
+      const guard = renderFetchGuard(asyncState, fetchConfig);
+      if (guard) { return guard; }
+
       return createElement(Component, {
         ...ownProps,
         ...mappedProps,
+        ...(fetchFn ? asyncState : {}),
         ref,
       } as unknown as P);
     });

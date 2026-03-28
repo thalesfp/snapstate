@@ -188,9 +188,22 @@ const UserCard = userStore.connect(CardView, {
 });
 ```
 
-`pick(path)` subscribes to that exact path — the component only re-renders when those specific values change.
+`pick(path)` subscribes to that exact path -- the component only re-renders when those specific values change.
 
-**Setup and cleanup** — lifecycle hooks that pair with `fetch`:
+`select` supports all lifecycle options -- `fetch`, `setup`, `cleanup`, `loading`, and `error`:
+
+```tsx
+const ProfilePage = accountStore.connect(ProfilePageInner, {
+  select: (pick) => ({
+    nameError: pick("errors.name"),
+    emailError: pick("errors.email"),
+  }),
+  setup: (s) => s.loadCurrentProfile(),
+  cleanup: (s) => s.reset(),
+});
+```
+
+**Setup and cleanup** -- lifecycle hooks that pair with `fetch`:
 
 ```tsx
 const Dashboard = dashboardStore.connect(DashboardView, {
