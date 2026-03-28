@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet, Link } from "react-rout
 import { authStore } from "../stores";
 import type { User } from "../stores";
 import { TodoApp } from "../features/todos/TodoApp";
+import { TodoDetailPage } from "../features/todos/TodoDetailPage";
 import { LoginForm } from "../features/auth/LoginForm";
 import { ProfilePage } from "../features/account/ProfilePage";
 
@@ -56,6 +57,7 @@ export function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route path="/todos" element={<TodoApp />} />
+            <Route path="/todos/:id" element={<TodoDetailPage />} />
             <Route path="/profile" element={<ProfilePage />} />
           </Route>
         </Route>

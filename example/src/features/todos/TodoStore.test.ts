@@ -17,7 +17,8 @@ describe("TodoStore", () => {
   let store: TodoStore;
 
   beforeEach(() => {
-    store = new TodoStore();
+    const mockAuth = { subscribe: () => { return () => {}; }, getSnapshot: () => ({ user: null }) };
+    store = new TodoStore(mockAuth);
     nextMockId = 1;
   });
 

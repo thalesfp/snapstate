@@ -1,18 +1,21 @@
 import { SnapStore } from "snapstate/react";
-import type { Todo, Filter } from "../../shared/types";
+import type { Subscribable } from "snapstate";
+import type { Todo, Filter, User } from "../../shared/types";
 
 type TodoOp = "fetch" | "add" | "toggle" | "remove" | "edit" | "clearCompleted";
 
 interface TodoState {
   todos: Todo[];
   filter: Filter;
+  userId: string;
 }
 
 export class TodoStore extends SnapStore<TodoState, TodoOp> {
   private nextId = 1;
 
-  constructor() {
-    super({ todos: [], filter: "all" });
+  constructor(auth: Subscribable<{ user: User | null }>) {
+    super({ todos: [], filter: "all", userId: "" });
+    this.derive("userId", auth, (s) => s.user?.id ?? "");
   }
 
   fetchTodos() {

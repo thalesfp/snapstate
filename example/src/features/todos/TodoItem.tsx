@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Link } from "react-router";
 import type { OperationState } from "snapstate/react";
 import { todoStore } from "../../stores";
 import type { Todo } from "../../stores";
@@ -62,6 +63,9 @@ export function TodoItemInner({ todo, editState }: TodoItemProps) {
         <span className="todo-text" onDoubleClick={() => setEditing(true)}>
           {todo.text}
         </span>
+        <Link className="detail-link" to={`/todos/${todo.id}`}>
+          ›
+        </Link>
       )}
       {saving ? (
         <span className="save-spinner" />
