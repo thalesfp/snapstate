@@ -311,6 +311,21 @@ export const LoginForm = loginStore.connect(LoginFormView, (s) => ({
 | `isDirty` / `isFieldDirty(field)` | Dirty tracking (supports Date and array equality) |
 | `errors` / `isValid` | Field-level error arrays |
 
+## Cross-Store Derivation
+
+Stores can reactively mirror a value from another store with `derive()`. It subscribes to the source, applies an `Object.is` change guard, and syncs the selected value into a local state key. The subscription is cleaned up on `destroy()`.
+
+```ts
+class ProjectsStore extends ReactSnapStore<{ companyId: string; projects: Project[] }, "fetch"> {
+  constructor(company: Subscribable<{ currentCompany: { id: string } }>) {
+    super({ companyId: "", projects: [] });
+    this.derive("companyId", company, (s) => s.currentCompany.id);
+  }
+}
+```
+
+The source accepts any `Subscribable` (every `SnapStore` satisfies this), so stores stay testable in isolation -- pass a real store or a minimal mock.
+
 ## Key Concepts
 
 **Path-based subscriptions** — State changes are tracked via dot-separated paths (e.g. `"user.name"`, `"items.0.title"`). A trie structure ensures listeners fire only when their path or its ancestors/descendants change.

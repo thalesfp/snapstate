@@ -8,6 +8,9 @@ import type {
   StateAccessor,
   ApiAccessor,
   ApiRequestOptions,
+  Subscribable,
+  DotPaths,
+  GetByPath,
 } from "./types.js";
 import { asyncStatus } from "./types.js";
 import { createStore } from "./store.js";
@@ -57,6 +60,7 @@ export class SnapStore<T extends object, K extends string = string> {
   private _store: RawStore<T>;
   private _operations = new Map<K, OperationState>();
   private _generations = new Map<K, number>();
+  private _derivedUnsubs: Unsubscribe[] = [];
 
   protected readonly state: StateAccessor<T>;
   protected readonly api: ApiAccessor<K>;
@@ -214,8 +218,36 @@ export class SnapStore<T extends object, K extends string = string> {
     return { ...(this._operations.get(key) ?? IDLE_STATE) };
   }
 
+  /** Keep a local state key in sync with a value selected from an external store. Cleaned up on `destroy()`. */
+  protected derive<S extends object, P extends DotPaths<T> & string>(
+    localKey: P,
+    source: Subscribable<S>,
+    selector: (state: S) => GetByPath<T, P>,
+  ): void {
+    let previousValue: GetByPath<T, P> = selector(source.getSnapshot());
+
+    if (!Object.is(previousValue, this.state.get(localKey))) {
+      this.state.set(localKey, previousValue);
+    }
+
+    const unsub = source.subscribe(() => {
+      const nextValue = selector(source.getSnapshot());
+      if (Object.is(nextValue, previousValue)) {
+        return;
+      }
+      previousValue = nextValue;
+      this.state.set(localKey, nextValue);
+    });
+
+    this._derivedUnsubs.push(unsub);
+  }
+
   /** Tear down subscriptions and cleanup. */
   destroy(): void {
+    for (const unsub of this._derivedUnsubs) {
+      unsub();
+    }
+    this._derivedUnsubs.length = 0;
     this._store.destroy();
   }
 }
