@@ -1283,3 +1283,166 @@ describe("connect setup", () => {
     expect(cleanupSpy).toHaveBeenCalledOnce();
   });
 });
+
+describe("connect deps", () => {
+  it("re-runs fetch when deps change", async () => {
+    const store = new TestStore();
+    const fetchSpy = vi.fn(async () => {});
+
+    function Display({ count }: { count: number; status: AsyncStatus; error: string | null }) {
+      return createElement("span", null, count);
+    }
+
+    const Connected = store.connect(Display, {
+      props: (s) => ({ count: s.count }),
+      fetch: fetchSpy,
+      deps: (props) => [props.id],
+    });
+
+    const { rerender } = render(createElement(Connected, { id: "1" } as any));
+    await actTL(async () => {});
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    rerender(createElement(Connected, { id: "2" } as any));
+    await actTL(async () => {});
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not re-run fetch when deps are unchanged", async () => {
+    const store = new TestStore();
+    const fetchSpy = vi.fn(async () => {});
+
+    function Display({ count }: { count: number; status: AsyncStatus; error: string | null }) {
+      return createElement("span", null, count);
+    }
+
+    const Connected = store.connect(Display, {
+      props: (s) => ({ count: s.count }),
+      fetch: fetchSpy,
+      deps: (props) => [props.id],
+    });
+
+    const { rerender } = render(createElement(Connected, { id: "1" } as any));
+    await actTL(async () => {});
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    rerender(createElement(Connected, { id: "1" } as any));
+    await actTL(async () => {});
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes ownProps to fetch callback", async () => {
+    const store = new TestStore();
+    const receivedProps: Record<string, unknown>[] = [];
+
+    function Display({ count }: { count: number; status: AsyncStatus; error: string | null }) {
+      return createElement("span", null, count);
+    }
+
+    const Connected = store.connect(Display, {
+      props: (s) => ({ count: s.count }),
+      fetch: async (_s, props) => { receivedProps.push({ ...props }); },
+      deps: (props) => [props.id],
+    });
+
+    render(createElement(Connected, { id: "abc" } as any));
+    await actTL(async () => {});
+
+    expect(receivedProps).toHaveLength(1);
+    expect(receivedProps[0].id).toBe("abc");
+  });
+
+  it("runs cleanup between dep changes", async () => {
+    const store = new TestStore();
+    const cleanupSpy = vi.fn();
+
+    function Display({ count }: { count: number }) {
+      return createElement("span", null, count);
+    }
+
+    const Connected = store.connect(Display, {
+      props: (s) => ({ count: s.count }),
+      setup: () => {},
+      cleanup: cleanupSpy,
+      deps: (props) => [props.id],
+    });
+
+    const { rerender } = render(createElement(Connected, { id: "1" } as any));
+    await actTL(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(cleanupSpy).not.toHaveBeenCalled();
+
+    rerender(createElement(Connected, { id: "2" } as any));
+    await actTL(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(cleanupSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes ownProps to setup and cleanup", async () => {
+    const store = new TestStore();
+    const setupProps: Record<string, unknown>[] = [];
+    const cleanupProps: Record<string, unknown>[] = [];
+
+    function Display({ count }: { count: number }) {
+      return createElement("span", null, count);
+    }
+
+    const Connected = store.connect(Display, {
+      props: (s) => ({ count: s.count }),
+      setup: (_s, props) => { setupProps.push({ ...props }); },
+      cleanup: (_s, props) => { cleanupProps.push({ ...props }); },
+      deps: (props) => [props.id],
+    });
+
+    const { unmount } = render(createElement(Connected, { id: "1" } as any));
+    await actTL(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+    expect(setupProps).toHaveLength(1);
+    expect(setupProps[0].id).toBe("1");
+
+    unmount();
+    await actTL(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(cleanupProps).toHaveLength(1);
+    expect(cleanupProps[0].id).toBe("1");
+  });
+
+  it("cleanup-only config fires on dep changes", async () => {
+    const store = new TestStore();
+    const cleanupSpy = vi.fn();
+
+    function Display({ count }: { count: number }) {
+      return createElement("span", null, count);
+    }
+
+    const Connected = store.connect(Display, {
+      props: (s) => ({ count: s.count }),
+      cleanup: cleanupSpy,
+      deps: (props) => [props.id],
+    });
+
+    const { rerender } = render(createElement(Connected, { id: "1" } as any));
+    await actTL(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(cleanupSpy).not.toHaveBeenCalled();
+
+    rerender(createElement(Connected, { id: "2" } as any));
+    await actTL(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(cleanupSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("cleanup-only with deps does not fire in StrictMode probe", async () => {
+    const store = new TestStore();
+    const cleanupSpy = vi.fn();
+
+    function Display({ count }: { count: number }) {
+      return createElement("span", null, count);
+    }
+
+    const Connected = store.connect(Display, {
+      props: (s) => ({ count: s.count }),
+      cleanup: cleanupSpy,
+      deps: (props) => [props.id],
+    });
+
+    render(createElement(StrictMode, null, createElement(Connected, { id: "1" } as any)));
+    await actTL(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(cleanupSpy).not.toHaveBeenCalled();
+  });
+});
