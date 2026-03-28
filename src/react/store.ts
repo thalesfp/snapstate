@@ -11,38 +11,44 @@ import { SnapStore } from "../core/base.js";
 import { asyncStatus } from "../core/types.js";
 import type { StoreOptions, AsyncStatus, DotPaths, GetByPath } from "../core/types.js";
 
+type OwnProps = Record<string, unknown>;
+
 interface ConnectConfig<S, MappedProps> {
   props: (store: S) => MappedProps;
-  setup?: (store: S) => void;
-  fetch: (store: S) => Promise<void>;
-  cleanup?: (store: S) => void;
+  setup?: (store: S, props: OwnProps) => void;
+  fetch: (store: S, props: OwnProps) => Promise<void>;
+  cleanup?: (store: S, props: OwnProps) => void;
+  deps?: (props: OwnProps) => unknown[];
   loading?: React.ComponentType;
   error?: React.ComponentType<{ error: string }>;
 }
 
 interface ConnectPropsConfig<S, MappedProps> {
   props: (store: S) => MappedProps;
-  setup?: (store: S) => void;
-  cleanup?: (store: S) => void;
+  setup?: (store: S, props: OwnProps) => void;
+  cleanup?: (store: S, props: OwnProps) => void;
+  deps?: (props: OwnProps) => unknown[];
 }
 
 type PickFn<T extends object> = <P extends DotPaths<T>>(path: P) => GetByPath<T, P>;
 
 interface SelectConnectConfig<T extends object, S, MappedProps> {
   select: (pick: PickFn<T>) => MappedProps;
-  fetch?: (store: S) => Promise<void>;
-  setup?: (store: S) => void;
-  cleanup?: (store: S) => void;
+  fetch?: (store: S, props: OwnProps) => Promise<void>;
+  setup?: (store: S, props: OwnProps) => void;
+  cleanup?: (store: S, props: OwnProps) => void;
+  deps?: (props: OwnProps) => unknown[];
   loading?: React.ComponentType;
   error?: React.ComponentType<{ error: string }>;
 }
 
 interface SelectFetchConnectConfig<T extends object, S, MappedProps> extends SelectConnectConfig<T, S, MappedProps> {
-  fetch: (store: S) => Promise<void>;
+  fetch: (store: S, props: OwnProps) => Promise<void>;
 }
 
 interface FetchConfig<S> {
   fetchFn?: (store: S) => Promise<void>;
+  deps?: unknown[];
   loadingComponent?: React.ComponentType;
   errorComponent?: React.ComponentType<{ error: string }>;
 }
@@ -55,7 +61,7 @@ interface FetchState {
 const idleFetchState: FetchState = { status: asyncStatus("idle"), error: null };
 
 function useFetchLifecycle<S>(store: S, config: FetchConfig<S>): FetchState {
-  const { fetchFn } = config;
+  const { fetchFn, deps } = config;
 
   const [asyncState, setAsyncState] = useState<FetchState>(idleFetchState);
   const fetchGenRef = useRef(0);
@@ -84,7 +90,7 @@ function useFetchLifecycle<S>(store: S, config: FetchConfig<S>): FetchState {
         }
       });
     return () => { cancelled = true; };
-  }, []);
+  }, deps ?? []);
 
   return asyncState;
 }
@@ -108,25 +114,41 @@ function useLifecycle<S>(
   store: S,
   setupFn: ((store: S) => void) | undefined,
   cleanupFn: ((store: S) => void) | undefined,
+  deps?: unknown[],
 ): void {
   const lifecycleGenRef = useRef(0);
+  const setupRanGenRef = useRef(0);
+  const hasDeps = deps !== undefined;
   useEffect(() => {
     if (!setupFn && !cleanupFn) { return; }
     const gen = ++lifecycleGenRef.current;
     if (setupFn) {
       queueMicrotask(() => {
-        if (gen === lifecycleGenRef.current) { setupFn(store); }
+        if (gen === lifecycleGenRef.current) {
+          setupFn(store);
+          setupRanGenRef.current = gen;
+        }
+      });
+    } else {
+      queueMicrotask(() => {
+        if (gen === lifecycleGenRef.current) {
+          setupRanGenRef.current = gen;
+        }
       });
     }
     return () => {
       const teardownGen = lifecycleGenRef.current;
       if (cleanupFn) {
         queueMicrotask(() => {
-          if (teardownGen === lifecycleGenRef.current) { cleanupFn(store); }
+          if (hasDeps || setupFn) {
+            if (setupRanGenRef.current === gen) { cleanupFn(store); }
+          } else {
+            if (teardownGen === lifecycleGenRef.current) { cleanupFn(store); }
+          }
         });
       }
     };
-  }, []);
+  }, deps ?? []);
 }
 
 function shallowEqual(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
@@ -137,6 +159,36 @@ function shallowEqual(a: Record<string, unknown>, b: Record<string, unknown>): b
     if (a[key] !== b[key]) { return false; }
   }
   return true;
+}
+
+interface LifecycleConfig<S> {
+  fetchFn?: (store: S, props: OwnProps) => Promise<void>;
+  setupFn?: (store: S, props: OwnProps) => void;
+  cleanupFn?: (store: S, props: OwnProps) => void;
+  depsFn?: (props: OwnProps) => unknown[];
+  loadingComponent?: React.ComponentType;
+  errorComponent?: React.ComponentType<{ error: string }>;
+}
+
+function bindLifecycle<S>(ownProps: Record<string, unknown>, config: LifecycleConfig<S>) {
+  const own = ownProps as OwnProps;
+  const deps = config.depsFn ? config.depsFn(own) : undefined;
+
+  const wrapFetch = config.fetchFn;
+  const wrapSetup = config.setupFn;
+  const wrapCleanup = config.cleanupFn;
+
+  const fetchFn = wrapFetch
+    ? (s: S) => { return wrapFetch(s, own); }
+    : undefined;
+  const setupFn = wrapSetup
+    ? (s: S) => { wrapSetup(s, own); }
+    : undefined;
+  const cleanupFn = wrapCleanup
+    ? (s: S) => { wrapCleanup(s, own); }
+    : undefined;
+
+  return { deps, fetchFn, setupFn, cleanupFn };
 }
 
 export class ReactSnapStore<T extends object, K extends string = string> extends SnapStore<T, K> {
@@ -189,15 +241,20 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       ? null
       : configOrMapper as ConnectConfig<this, MappedProps>;
     const mapToProps = config ? config.props : configOrMapper as (store: this) => MappedProps;
-    const fetchFn = config?.fetch;
-    const loadingComponent = config?.loading;
-    const errorComponent = config?.error;
-    const setupFn = config?.setup;
-    const cleanupFn = config?.cleanup;
+    const lcConfig: LifecycleConfig<typeof store> = {
+      fetchFn: config?.fetch,
+      setupFn: config?.setup,
+      cleanupFn: config?.cleanup,
+      depsFn: config?.deps,
+      loadingComponent: config?.loading,
+      errorComponent: config?.error,
+    };
 
     const Connected = forwardRef<unknown, Omit<P, keyof MappedProps>>(function Connected(ownProps, ref) {
       const cachedRef = useRef<{ revision: number; props: MappedProps } | null>(null);
       const revisionRef = useRef(0);
+
+      const { deps, fetchFn, setupFn, cleanupFn } = bindLifecycle(ownProps as OwnProps, lcConfig);
 
       const subscribe = useCallback(
         (cb: () => void) => store.subscribe(() => {
@@ -223,9 +280,13 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
 
       const mappedProps = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-      useLifecycle(store, setupFn, cleanupFn);
+      useLifecycle(store, setupFn, cleanupFn, deps);
 
-      const fetchConfig: FetchConfig<typeof store> = { fetchFn, loadingComponent, errorComponent };
+      const fetchConfig: FetchConfig<typeof store> = {
+        fetchFn, deps,
+        loadingComponent: lcConfig.loadingComponent,
+        errorComponent: lcConfig.errorComponent,
+      };
       const asyncState = useFetchLifecycle(store, fetchConfig);
 
       const guard = renderFetchGuard(asyncState, fetchConfig);
@@ -234,7 +295,7 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       return createElement(Component, {
         ...ownProps,
         ...mappedProps,
-        ...(fetchFn ? asyncState : {}),
+        ...(lcConfig.fetchFn ? asyncState : {}),
         ref,
       } as unknown as P);
     });
@@ -249,11 +310,14 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
   ): React.FC<Omit<P, keyof MappedProps>> {
     const store = this;
     const selectFn = config.select;
-    const fetchFn = config.fetch;
-    const setupFn = config.setup;
-    const cleanupFn = config.cleanup;
-    const loadingComponent = config.loading;
-    const errorComponent = config.error;
+    const lcConfig: LifecycleConfig<typeof store> = {
+      fetchFn: config.fetch,
+      setupFn: config.setup,
+      cleanupFn: config.cleanup,
+      depsFn: config.deps,
+      loadingComponent: config.loading,
+      errorComponent: config.error,
+    };
 
     const resolvePathValue = (path: string): any => {
       const segments = path.split(".");
@@ -280,6 +344,8 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
     const Connected = forwardRef<unknown, Omit<P, keyof MappedProps>>(function Connected(ownProps, ref) {
       const cachedRef = useRef<{ revision: number; props: MappedProps } | null>(null);
       const revisionRef = useRef(0);
+
+      const { deps, fetchFn, setupFn, cleanupFn } = bindLifecycle(ownProps as OwnProps, lcConfig);
 
       const subscribe = useCallback(
         (cb: () => void) => {
@@ -310,9 +376,13 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
 
       const mappedProps = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-      useLifecycle(store, setupFn, cleanupFn);
+      useLifecycle(store, setupFn, cleanupFn, deps);
 
-      const fetchConfig: FetchConfig<typeof store> = { fetchFn, loadingComponent, errorComponent };
+      const fetchConfig: FetchConfig<typeof store> = {
+        fetchFn, deps,
+        loadingComponent: lcConfig.loadingComponent,
+        errorComponent: lcConfig.errorComponent,
+      };
       const asyncState = useFetchLifecycle(store, fetchConfig);
 
       const guard = renderFetchGuard(asyncState, fetchConfig);
@@ -321,7 +391,7 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       return createElement(Component, {
         ...ownProps,
         ...mappedProps,
-        ...(fetchFn ? asyncState : {}),
+        ...(lcConfig.fetchFn ? asyncState : {}),
         ref,
       } as unknown as P);
     });
