@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 
 vi.mock("../../stores", () => ({
   todoStore: {
@@ -17,6 +18,9 @@ import { asyncStatus } from "snapstate/react";
 
 const todo = { id: "1", text: "Test todo", completed: false };
 const idle = { status: asyncStatus("idle"), error: null };
+const wrapper = ({ children }: { children: React.ReactNode }) => (
+  <MemoryRouter>{children}</MemoryRouter>
+);
 
 describe("TodoItemInner", () => {
   beforeEach(() => {
@@ -24,13 +28,14 @@ describe("TodoItemInner", () => {
   });
 
   it("renders todo text", () => {
-    render(<TodoItemInner todo={todo} editState={idle} />);
+    render(<TodoItemInner todo={todo} editState={idle} />, { wrapper });
     expect(screen.getByText("Test todo")).toBeTruthy();
   });
 
   it("applies completed class when todo is completed", () => {
     const { container } = render(
       <TodoItemInner todo={{ ...todo, completed: true }} editState={idle} />,
+      { wrapper },
     );
     expect(container.querySelector("li")!.className).toContain("completed");
   });
@@ -38,6 +43,7 @@ describe("TodoItemInner", () => {
   it("does not apply completed class when todo is active", () => {
     const { container } = render(
       <TodoItemInner todo={todo} editState={idle} />,
+      { wrapper },
     );
     expect(container.querySelector("li")!.className).not.toContain("completed");
   });
@@ -45,6 +51,7 @@ describe("TodoItemInner", () => {
   it("checks the checkbox when completed", () => {
     const { container } = render(
       <TodoItemInner todo={{ ...todo, completed: true }} editState={idle} />,
+      { wrapper },
     );
     const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
     expect(checkbox.checked).toBe(true);
@@ -53,6 +60,7 @@ describe("TodoItemInner", () => {
   it("unchecks the checkbox when active", () => {
     const { container } = render(
       <TodoItemInner todo={todo} editState={idle} />,
+      { wrapper },
     );
     const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
     expect(checkbox.checked).toBe(false);
@@ -61,6 +69,7 @@ describe("TodoItemInner", () => {
   it("calls toggleTodo on checkbox click", async () => {
     const { container } = render(
       <TodoItemInner todo={todo} editState={idle} />,
+      { wrapper },
     );
     const checkbox = container.querySelector('input[type="checkbox"]')!;
     await userEvent.click(checkbox);
@@ -70,13 +79,14 @@ describe("TodoItemInner", () => {
   it("calls removeTodo on delete button click", async () => {
     const { container } = render(
       <TodoItemInner todo={todo} editState={idle} />,
+      { wrapper },
     );
     await userEvent.click(container.querySelector(".delete-btn")!);
     expect(todoStore.removeTodo).toHaveBeenCalledWith("1");
   });
 
   it("enters edit mode on double-click", async () => {
-    render(<TodoItemInner todo={todo} editState={idle} />);
+    render(<TodoItemInner todo={todo} editState={idle} />, { wrapper });
     await userEvent.dblClick(screen.getByText("Test todo"));
     expect(screen.getByDisplayValue("Test todo")).toBeTruthy();
   });
@@ -84,6 +94,7 @@ describe("TodoItemInner", () => {
   it("calls editTodo on Enter in edit mode", async () => {
     const { container } = render(
       <TodoItemInner todo={todo} editState={idle} />,
+      { wrapper },
     );
     await userEvent.dblClick(screen.getByText("Test todo"));
     const editInput = container.querySelector(".edit-input") as HTMLInputElement;
@@ -95,6 +106,7 @@ describe("TodoItemInner", () => {
   it("cancels editing on Escape", async () => {
     const { container } = render(
       <TodoItemInner todo={todo} editState={idle} />,
+      { wrapper },
     );
     await userEvent.dblClick(screen.getByText("Test todo"));
     const editInput = container.querySelector(".edit-input") as HTMLInputElement;
@@ -107,6 +119,7 @@ describe("TodoItemInner", () => {
   it("exits edit mode after saving", async () => {
     const { container } = render(
       <TodoItemInner todo={todo} editState={idle} />,
+      { wrapper },
     );
     await userEvent.dblClick(screen.getByText("Test todo"));
     const editInput = container.querySelector(".edit-input") as HTMLInputElement;
