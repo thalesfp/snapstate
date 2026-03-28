@@ -13,37 +13,37 @@ import type { StoreOptions, AsyncStatus, DotPaths, GetByPath } from "../core/typ
 
 type OwnProps = Record<string, unknown>;
 
-interface ConnectConfig<S, MappedProps> {
+interface ConnectConfig<S, MappedProps, Own = OwnProps> {
   props: (store: S) => MappedProps;
-  setup?: (store: S, props: OwnProps) => void;
-  fetch: (store: S, props: OwnProps) => Promise<void>;
-  cleanup?: (store: S, props: OwnProps) => void;
-  deps?: (props: OwnProps) => unknown[];
+  setup?: (store: S, props: Own) => void;
+  fetch: (store: S, props: Own) => Promise<void>;
+  cleanup?: (store: S, props: Own) => void;
+  deps?: (props: Own) => unknown[];
   loading?: React.ComponentType;
   error?: React.ComponentType<{ error: string }>;
 }
 
-interface ConnectPropsConfig<S, MappedProps> {
+interface ConnectPropsConfig<S, MappedProps, Own = OwnProps> {
   props: (store: S) => MappedProps;
-  setup?: (store: S, props: OwnProps) => void;
-  cleanup?: (store: S, props: OwnProps) => void;
-  deps?: (props: OwnProps) => unknown[];
+  setup?: (store: S, props: Own) => void;
+  cleanup?: (store: S, props: Own) => void;
+  deps?: (props: Own) => unknown[];
 }
 
 type PickFn<T extends object> = <P extends DotPaths<T>>(path: P) => GetByPath<T, P>;
 
-interface SelectConnectConfig<T extends object, S, MappedProps> {
+interface SelectConnectConfig<T extends object, S, MappedProps, Own = OwnProps> {
   select: (pick: PickFn<T>) => MappedProps;
-  fetch?: (store: S, props: OwnProps) => Promise<void>;
-  setup?: (store: S, props: OwnProps) => void;
-  cleanup?: (store: S, props: OwnProps) => void;
-  deps?: (props: OwnProps) => unknown[];
+  fetch?: (store: S, props: Own) => Promise<void>;
+  setup?: (store: S, props: Own) => void;
+  cleanup?: (store: S, props: Own) => void;
+  deps?: (props: Own) => unknown[];
   loading?: React.ComponentType;
   error?: React.ComponentType<{ error: string }>;
 }
 
-interface SelectFetchConnectConfig<T extends object, S, MappedProps> extends SelectConnectConfig<T, S, MappedProps> {
-  fetch: (store: S, props: OwnProps) => Promise<void>;
+interface SelectFetchConnectConfig<T extends object, S, MappedProps, Own = OwnProps> extends SelectConnectConfig<T, S, MappedProps, Own> {
+  fetch: (store: S, props: Own) => Promise<void>;
 }
 
 interface FetchConfig<S> {
@@ -204,24 +204,24 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
   /** Wire a component to the store with async data fetching, loading, and error handling. */
   connect<P extends object, MappedProps extends Record<string, unknown>>(
     Component: React.ComponentType<P>,
-    config: ConnectConfig<this, MappedProps>,
+    config: ConnectConfig<this, MappedProps, Omit<P, keyof MappedProps | "status" | "error">>,
   ): React.FC<Omit<P, keyof MappedProps | "status" | "error">>;
   /** Wire a component to the store with props mapping and optional cleanup. */
   connect<P extends object, MappedProps extends Record<string, unknown>>(
     Component: React.ComponentType<P>,
-    config: ConnectPropsConfig<this, MappedProps>,
+    config: ConnectPropsConfig<this, MappedProps, Omit<P, keyof MappedProps>>,
   ): React.FC<Omit<P, keyof MappedProps>>;
   /** Wire a component with granular `select` subscriptions plus async `fetch` for mount-time init. */
   connect<P extends object, MappedProps extends Record<string, unknown>>(
     Component: React.ComponentType<P>,
-    config: SelectFetchConnectConfig<T, this, MappedProps>,
+    config: SelectFetchConnectConfig<T, this, MappedProps, Omit<P, keyof MappedProps | "status" | "error">>,
   ): React.FC<Omit<P, keyof MappedProps | "status" | "error">>;
   /** Wire a component to the store with granular path-based subscriptions via `select`.
    *  Paths are captured once at connect-time — select must use a stable set of paths.
    *  For conditional/dynamic path selection, use the `mapToProps` overload instead. */
   connect<P extends object, MappedProps extends Record<string, unknown>>(
     Component: React.ComponentType<P>,
-    config: SelectConnectConfig<T, this, MappedProps>,
+    config: SelectConnectConfig<T, this, MappedProps, Omit<P, keyof MappedProps>>,
   ): React.FC<Omit<P, keyof MappedProps>>;
   connect<P extends object, MappedProps extends Record<string, unknown>>(
     Component: React.ComponentType<P>,
@@ -241,14 +241,14 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       ? null
       : configOrMapper as ConnectConfig<this, MappedProps>;
     const mapToProps = config ? config.props : configOrMapper as (store: this) => MappedProps;
-    const lcConfig: LifecycleConfig<typeof store> = {
+    const lcConfig = {
       fetchFn: config?.fetch,
       setupFn: config?.setup,
       cleanupFn: config?.cleanup,
       depsFn: config?.deps,
       loadingComponent: config?.loading,
       errorComponent: config?.error,
-    };
+    } as LifecycleConfig<typeof store>;
 
     const Connected = forwardRef<unknown, Omit<P, keyof MappedProps>>(function Connected(ownProps, ref) {
       const cachedRef = useRef<{ revision: number; props: MappedProps } | null>(null);
@@ -306,18 +306,18 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
 
   private _connectWithSelect<P extends object, MappedProps extends Record<string, unknown>>(
     Component: React.ComponentType<P>,
-    config: SelectConnectConfig<T, this, MappedProps>,
+    config: SelectConnectConfig<T, this, MappedProps, Omit<P, keyof MappedProps>>,
   ): React.FC<Omit<P, keyof MappedProps>> {
     const store = this;
     const selectFn = config.select;
-    const lcConfig: LifecycleConfig<typeof store> = {
+    const lcConfig = {
       fetchFn: config.fetch,
       setupFn: config.setup,
       cleanupFn: config.cleanup,
       depsFn: config.deps,
       loadingComponent: config.loading,
       errorComponent: config.error,
-    };
+    } as LifecycleConfig<typeof store>;
 
     const resolvePathValue = (path: string): any => {
       const segments = path.split(".");
