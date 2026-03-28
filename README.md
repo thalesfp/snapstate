@@ -1,20 +1,10 @@
-# @thalesfp/snapstate
+# Snapstate
 
-State management for React. Replace useState/useEffect tangles with class-based stores that are easy to test, easy to extend, and predictable by default.
+State management for React. Class-based stores that are easy to test, easy to extend, and predictable by default.
 
 ```bash
 npm install @thalesfp/snapstate
 ```
-
-## Features
-
-- **Class-based stores** — business logic in stores, components stay dumb
-- **Path-based subscriptions** — listeners fire only when relevant paths change
-- **Structural sharing** — unchanged subtrees keep reference identity
-- **Auto-batching** — synchronous sets coalesce into a single notification
-- **Built-in HTTP** — pluggable client with loading/error status tracking
-- **React integration** — `connect()` HOC with `useSyncExternalStore` under the hood
-- **Form stores** — Zod validation, `register()` for all HTML input types, dirty tracking, submit lifecycle
 
 ## Quick Start
 
@@ -28,6 +18,10 @@ interface State {
 class TodoStore extends ReactSnapStore<State, "load"> {
   constructor() {
     super({ todos: [] });
+  }
+
+  get todos() {
+    return this.state.get("todos");
   }
 
   loadTodos() {
@@ -60,36 +54,28 @@ function TodoListView({ todos }: { todos: State["todos"] }) {
 }
 
 export const TodoList = todoStore.connect(TodoListView, {
-  props: (s) => ({ todos: s.state.get("todos") }),
+  props: (s) => ({ todos: s.todos }),
   fetch: (s) => s.loadTodos(),
   loading: () => <p>Loading...</p>,
   error: ({ error }) => <p>Error: {error}</p>,
 });
 ```
 
-## Entry Points
+## Stores
 
-| Import | Description |
-|---|---|
-| `@thalesfp/snapstate` | Core `SnapStore`, types, `setHttpClient` |
-| `@thalesfp/snapstate/react` | `ReactSnapStore` with `connect()` HOC |
-| `@thalesfp/snapstate/form` | `SnapFormStore` with Zod validation and form lifecycle |
+Stores hold state, expose methods, and notify subscribers. State changes use dot-paths (`"user.name"`, `"items.0.title"`) tracked by a trie, so listeners only fire when their path changes. Synchronous `set()` calls are auto-batched via `queueMicrotask`, and every `set()` preserves reference identity for unchanged subtrees.
 
-React and Zod are optional peer dependencies — only needed if you use their respective entry points.
+`SnapStore<T, K>` is the base class. `T` is the state shape, `K` is the union of async operation keys.
 
-## Core API — `SnapStore<T, K>`
-
-Base class. `T` is the state shape, `K` is the union of async operation keys.
-
-### State Methods (protected `this.state.*`)
+### State (`this.state.*`)
 
 **Scalar:**
 
 | Method | Description |
 |---|---|
-| `get()` | Read the full state object |
-| `get(path)` | Read a value at a dot-path (e.g. `"user.name"`) |
-| `set(path, value)` | Set a value. Accepts a value or updater `(prev) => next` |
+| `get()` | Full state object |
+| `get(path)` | Value at a dot-path |
+| `set(path, value)` | Set a value or pass an updater `(prev) => next` |
 | `batch(fn)` | Group multiple sets into a single notification |
 | `computed(deps, fn)` | Lazily-recomputed derived value from dependency paths |
 
@@ -109,76 +95,74 @@ Base class. `T` is the state shape, `K` is the union of async operation keys.
 | `findIndexOf(path, predicate)` | Index of first match, or -1 |
 | `count(path, predicate)` | Count matching items |
 
-### HTTP Methods (protected `this.api.*`)
+### Async operations (`this.api.*`)
+
+Every operation is keyed. Concurrent calls to the same key use take-latest semantics -- stale responses are silently discarded.
 
 | Method | Description |
 |---|---|
 | `fetch(key, fn)` | Run async function with tracked status |
-| `get(key, url, onSuccess?)` | GET with status tracking |
-| `post(key, url, options?)` | POST with status tracking |
-| `put(key, url, options?)` | PUT with status tracking |
-| `patch(key, url, options?)` | PATCH with status tracking |
-| `delete(key, url, options?)` | DELETE with status tracking |
+| `get(key, url, onSuccess?)` | GET request |
+| `post(key, url, options?)` | POST request |
+| `put(key, url, options?)` | PUT request |
+| `patch(key, url, options?)` | PATCH request |
+| `delete(key, url, options?)` | DELETE request |
 
 Options: `{ body?, headers?, onSuccess?(data)?, onError?(error)? }`
 
-### Public Methods
+**Status tracking:** `getStatus(key)` returns `{ status, error }` where `status` has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`. Call `resetStatus(key)` to return an operation to `idle`, distinguishing "never loaded" from "loaded empty".
+
+### Cross-store derivation (`this.derive`)
+
+Keep a local state key in sync with a value selected from another store. Subscribes to the source, applies an `Object.is` change guard, and cleans up on `destroy()`.
+
+```ts
+class ProjectsStore extends ReactSnapStore<{ companyId: string; projects: Project[] }, "fetch"> {
+  constructor(company: Subscribable<{ currentCompany: { id: string } }>) {
+    super({ companyId: "", projects: [] });
+    this.derive("companyId", company, (s) => s.currentCompany.id);
+  }
+}
+```
+
+The source accepts any `Subscribable` (every `SnapStore` satisfies this), so stores stay testable in isolation -- pass a real store or a minimal mock.
+
+### Public interface
 
 | Method | Description |
 |---|---|
 | `subscribe(callback)` | Subscribe to all changes. Returns unsubscribe function |
 | `subscribe(path, callback)` | Subscribe to a specific path |
 | `getSnapshot()` | Current state (compatible with `useSyncExternalStore`) |
-| `getStatus(key)` | Async status: `{ status: AsyncStatus, error: string \| null }` |
-| `resetStatus(key?)` | Reset operation status to `idle`. Without a key, resets all operations |
-| `destroy()` | Tear down subscriptions |
+| `getStatus(key)` | Operation status |
+| `resetStatus(key?)` | Reset operation to idle |
+| `destroy()` | Tear down subscriptions and derivations |
 
-### Custom HTTP Client
+## Connect
 
-```ts
-import { setHttpClient } from "@thalesfp/snapstate";
+`ReactSnapStore` extends `SnapStore` with a `connect()` HOC. Available from `@thalesfp/snapstate/react`.
 
-setHttpClient({
-  async request(url, init) {
-    const res = await fetch(url, {
-      ...init,
-      headers: { ...init?.headers, Authorization: `Bearer ${getToken()}` },
-      body: init?.body ? JSON.stringify(init.body) : undefined,
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    return text ? JSON.parse(text) : undefined;
-  },
-});
-```
-
-## React Integration — `ReactSnapStore<T, K>`
-
-Extends `SnapStore`. Available from `@thalesfp/snapstate/react`.
-
-### connect()
-
-**Simple** — map store to props:
+### Map store to props
 
 ```tsx
 const UserName = userStore.connect(
   ({ name }: { name: string }) => <span>{name}</span>,
-  (store) => ({ name: store.state.get("user.name") }),
+  (store) => ({ name: store.getSnapshot().user.name }),
 );
 ```
 
-**Advanced** — with data fetching:
+### Data fetching
 
 ```tsx
 const UserProfile = userStore.connect(ProfileView, {
-  props: (s) => ({ user: s.state.get("user") }),
+  props: (s) => ({ user: s.getSnapshot().user }),
   fetch: (s) => s.loadUser(),
   loading: () => <Skeleton />,
   error: ({ error }) => <p>{error}</p>,
 });
 ```
 
-**Granular** — path-based subscriptions:
+### Granular subscriptions
 
 ```tsx
 const UserCard = userStore.connect(CardView, {
@@ -189,26 +173,13 @@ const UserCard = userStore.connect(CardView, {
 });
 ```
 
-`pick(path)` subscribes to that exact path -- the component only re-renders when those specific values change.
+`pick(path)` subscribes to that exact path -- the component only re-renders when those values change. `select` supports all lifecycle options (`fetch`, `setup`, `cleanup`, `loading`, `error`, `deps`).
 
-`select` supports all lifecycle options -- `fetch`, `setup`, `cleanup`, `loading`, and `error`:
-
-```tsx
-const ProfilePage = accountStore.connect(ProfilePageInner, {
-  select: (pick) => ({
-    nameError: pick("errors.name"),
-    emailError: pick("errors.email"),
-  }),
-  setup: (s) => s.loadCurrentProfile(),
-  cleanup: (s) => s.reset(),
-});
-```
-
-**Setup and cleanup** -- lifecycle hooks that pair with `fetch`:
+### Lifecycle
 
 ```tsx
 const Dashboard = dashboardStore.connect(DashboardView, {
-  props: (s) => ({ stats: s.state.get("stats") }),
+  props: (s) => ({ stats: s.getSnapshot().stats }),
   setup: (s) => s.initPolling(),
   fetch: (s) => s.loadStats(),
   cleanup: (s) => s.stopPolling(),
@@ -216,13 +187,21 @@ const Dashboard = dashboardStore.connect(DashboardView, {
 });
 ```
 
-`setup` runs synchronously before `fetch` -- use it to initialize timers, subscriptions, or AbortControllers. `cleanup` fires once on unmount. Both work with or without `fetch` and are safe in React StrictMode.
+| Option | When it runs | Typical use |
+|---|---|---|
+| `setup` | Before `fetch`, on mount (or when `deps` change) | Start timers, subscriptions, AbortControllers |
+| `fetch` | After `setup`, on mount (or when `deps` change) | Load data from the API |
+| `cleanup` | On unmount (or before re-running on `deps` change) | Stop timers, reset store state |
+| `loading` | While `fetch` is in progress | Render a spinner or skeleton |
+| `error` | When `fetch` fails | Render an error message |
 
-**Dependencies** -- re-run `fetch`/`setup`/`cleanup` when props change:
+All lifecycle options are safe in React StrictMode.
+
+### Dependencies
 
 ```tsx
 const ProjectDetail = projectStore.connect(ProjectView, {
-  props: (s) => ({ project: s.state.get("project") }),
+  select: (pick) => ({ project: pick("project") }),
   fetch: (s, props) => s.fetchProject(props.id),
   cleanup: (s) => s.reset(),
   deps: (props) => [props.id],
@@ -230,11 +209,11 @@ const ProjectDetail = projectStore.connect(ProjectView, {
 });
 ```
 
-`deps` receives the component's own props and returns a dependency array. When any value in the array changes, `cleanup` runs for the previous deps, then `fetch` and `setup` re-run with the new props. Without `deps`, lifecycle callbacks run once on mount (the default). `fetch`, `setup`, and `cleanup` all receive the component's own props as a second argument.
+`deps` returns a dependency array from the component's own props. When values change, `cleanup` runs for the previous deps, then `fetch` and `setup` re-run. Without `deps`, lifecycle callbacks run once on mount.
 
-## Form Store — `SnapFormStore<V, K>`
+## Forms
 
-Extends `ReactSnapStore`. Available from `@thalesfp/snapstate/form`. Requires `zod` peer dependency.
+`SnapFormStore<V, K>` extends `ReactSnapStore`. Available from `@thalesfp/snapstate/form`. Requires `zod` peer dependency.
 
 ```ts
 import { SnapFormStore } from "@thalesfp/snapstate/form";
@@ -260,9 +239,9 @@ class LoginStore extends SnapFormStore<LoginValues, "login"> {
 }
 ```
 
-### Using register()
+### register()
 
-`register()` returns props to spread onto form elements — handles ref tracking, value sync, and event binding:
+Returns props to spread onto form elements -- handles ref tracking, value sync, and event binding:
 
 ```tsx
 const loginStore = new LoginStore();
@@ -286,7 +265,7 @@ export const LoginForm = loginStore.connect(LoginFormView, (s) => ({
 }));
 ```
 
-### Validation Modes
+### Validation modes
 
 | Mode | Behavior |
 |---|---|
@@ -294,26 +273,11 @@ export const LoginForm = loginStore.connect(LoginFormView, (s) => ({
 | `onBlur` | Validate field on blur |
 | `onChange` | Validate field on every change |
 
-### Supported Form Elements
-
-| Element | How it works |
-|---|---|
-| `<input type="text">` (and password, email, url, tel, search) | `el.value` read/write |
-| `<input type="number">` | Coerced via `Number()` when field type is `number` |
-| `<input type="checkbox">` | `el.checked` / `defaultChecked` for boolean fields |
-| `<textarea>` | `el.value` read/write |
-| `<select>` | `el.value` read/write |
-| `<input type="range">` | Number coercion; browser handles clamping |
-| `<input type="radio">` | Multiple elements per field; reads checked value |
-| `<input type="date">` / `time` / `datetime-local` | Coerced to `Date`; formatted for DOM |
-| `<select multiple>` | Reads `selectedOptions` as array; coerces item types |
-| `<input type="file">` | Returns `File` or `File[]`; reset clears selection |
-
-### Form Methods
+### Form methods
 
 | Method | Description |
 |---|---|
-| `register(field)` | Returns `{ ref, name, defaultValue, onBlur, onChange }` for form elements |
+| `register(field)` | `{ ref, name, defaultValue, onBlur, onChange }` for form elements |
 | `setValue(field, value)` | Set field value |
 | `getValue(field)` | Get current field value (reads from DOM ref if registered) |
 | `getValues()` | Get all current values |
@@ -326,30 +290,38 @@ export const LoginForm = loginStore.connect(LoginFormView, (s) => ({
 | `isDirty` / `isFieldDirty(field)` | Dirty tracking (supports Date and array equality) |
 | `errors` / `isValid` | Field-level error arrays |
 
-## Cross-Store Derivation
+Supported elements: text inputs, number, checkbox, textarea, select, range, radio, date/time/datetime-local, select multiple, and file inputs.
 
-Stores can reactively mirror a value from another store with `derive()`. It subscribes to the source, applies an `Object.is` change guard, and syncs the selected value into a local state key. The subscription is cleaned up on `destroy()`.
+## Configuration
+
+### Entry points
+
+| Import | Description |
+|---|---|
+| `@thalesfp/snapstate` | Core `SnapStore`, types, `setHttpClient` |
+| `@thalesfp/snapstate/react` | `ReactSnapStore` with `connect()` HOC |
+| `@thalesfp/snapstate/form` | `SnapFormStore` with Zod validation and form lifecycle |
+
+React and Zod are optional peer dependencies -- only needed if you use their respective entry points.
+
+### Custom HTTP client
 
 ```ts
-class ProjectsStore extends ReactSnapStore<{ companyId: string; projects: Project[] }, "fetch"> {
-  constructor(company: Subscribable<{ currentCompany: { id: string } }>) {
-    super({ companyId: "", projects: [] });
-    this.derive("companyId", company, (s) => s.currentCompany.id);
-  }
-}
+import { setHttpClient } from "@thalesfp/snapstate";
+
+setHttpClient({
+  async request(url, init) {
+    const res = await fetch(url, {
+      ...init,
+      headers: { ...init?.headers, Authorization: `Bearer ${getToken()}` },
+      body: init?.body ? JSON.stringify(init.body) : undefined,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    return text ? JSON.parse(text) : undefined;
+  },
+});
 ```
-
-The source accepts any `Subscribable` (every `SnapStore` satisfies this), so stores stay testable in isolation -- pass a real store or a minimal mock.
-
-## Key Concepts
-
-**Path-based subscriptions** — State changes are tracked via dot-separated paths (e.g. `"user.name"`, `"items.0.title"`). A trie structure ensures listeners fire only when their path or its ancestors/descendants change.
-
-**Structural sharing** — Every `set()` produces a new root object but preserves reference identity for unchanged subtrees. This makes React's shallow comparison efficient.
-
-**Auto-batching** — Multiple synchronous `set()` calls queue a single notification via `queueMicrotask()`. Use `batch()` for explicit control.
-
-**Async status tracking** -- Every `api.*` call is keyed. `getStatus(key)` returns `{ status, error }` where status has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`. Call `resetStatus(key)` to return an operation to `idle`, distinguishing "never loaded" from "loaded empty".
 
 ## Example App
 
