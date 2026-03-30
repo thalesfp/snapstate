@@ -492,7 +492,8 @@ h1 {
 .todo-detail-error {
   color: #e74c3c;
   font-size: 14px;
-  margin-bottom: 12px;
+  text-align: center;
+  padding: 20px 0;
 }
 
 .loading-spinner {
