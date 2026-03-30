@@ -180,6 +180,7 @@ export class SnapStore<T extends object, K extends string = string> {
       count: (path, predicate) => {
         return (store.get(path as any) as any[]).filter(predicate).length;
       },
+      reset: (...paths) => store.reset(...(paths as string[])),
     };
 
     this.api = {

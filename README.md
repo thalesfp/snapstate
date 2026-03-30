@@ -78,6 +78,8 @@ Stores hold state, expose methods, and notify subscribers. State changes use dot
 | `set(path, value)` | Set a value or pass an updater `(prev) => next` |
 | `batch(fn)` | Group multiple sets into a single notification |
 | `computed(deps, fn)` | Lazily-recomputed derived value from dependency paths |
+| `reset()` | Restore all state to initial values |
+| `reset(...paths)` | Restore only the specified paths to initial values |
 
 **Array:**
 

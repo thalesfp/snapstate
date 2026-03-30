@@ -180,6 +180,81 @@ describe("Store", () => {
   });
 });
 
+describe("reset", () => {
+  it("full reset restores all fields to initial values", () => {
+    const store = createStore({ count: 5, name: "hello", items: [1, 2] });
+    store.set("count", 99);
+    store.set("name", "changed");
+    store.set("items", [3, 4, 5]);
+
+    store.reset();
+
+    expect(store.get("count")).toBe(5);
+    expect(store.get("name")).toBe("hello");
+    expect(store.get("items")).toEqual([1, 2]);
+  });
+
+  it("full reset notifies subscribers", () => {
+    const store = createStore({ x: 0 }, { autoBatch: false });
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    store.set("x", 1);
+    listener.mockClear();
+
+    store.reset();
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it("partial reset restores only specified paths", () => {
+    const store = createStore({ a: 1, b: 2, c: 3 }, { autoBatch: false });
+    store.set("a", 10);
+    store.set("b", 20);
+    store.set("c", 30);
+
+    store.reset("a", "c");
+
+    expect(store.get("a")).toBe(1);
+    expect(store.get("b")).toBe(20);
+    expect(store.get("c")).toBe(3);
+  });
+
+  it("partial reset preserves reference identity on untouched paths", () => {
+    const items = [1, 2, 3];
+    const store = createStore({ items, name: "test" }, { autoBatch: false });
+    store.set("name", "changed");
+
+    const snap1 = store.getSnapshot();
+    store.reset("name");
+    const snap2 = store.getSnapshot();
+
+    expect(snap2.name).toBe("test");
+    expect(snap2.items).toBe(snap1.items);
+  });
+
+  it("full reset clears properties absent from initial state", () => {
+    const store = createStore<{ items: number[]; selectedId?: string }>({ items: [] });
+    store.set("selectedId" as any, "1");
+    expect(store.get("selectedId" as any)).toBe("1");
+
+    store.reset();
+
+    expect(store.get("selectedId" as any)).toBeUndefined();
+    expect(store.get("items")).toEqual([]);
+  });
+
+  it("works with nested paths", () => {
+    const store = createStore({ user: { name: "Alice", age: 30 } });
+    store.set("user.name", "Bob");
+    store.set("user.age", 25);
+
+    store.reset("user.name");
+
+    expect(store.get("user.name")).toBe("Alice");
+    expect(store.get("user.age")).toBe(25);
+  });
+});
+
 describe("setHttpClient export", () => {
   it("is exported as a function from core entrypoint", () => {
     expect(typeof setHttpClient).toBe("function");

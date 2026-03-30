@@ -123,6 +123,7 @@ export interface StateAccessor<T extends object> {
   find<P extends ArrayPaths<T>>(path: P, predicate: (item: ElementOf<T[P]>) => boolean): ElementOf<T[P]> | undefined;
   findIndexOf<P extends ArrayPaths<T>>(path: P, predicate: (item: ElementOf<T[P]>) => boolean): number;
   count<P extends ArrayPaths<T>>(path: P, predicate: (item: ElementOf<T[P]>) => boolean): number;
+  reset(...paths: DotPaths<T>[]): void;
 }
 
 export interface ApiAccessor<K extends string> {
@@ -152,4 +153,6 @@ export interface RawStore<T extends object> extends Subscribable<T> {
   notify(): void;
 
   destroy(): void;
+
+  reset(...paths: string[]): void;
 }
