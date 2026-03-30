@@ -15,9 +15,4 @@ export class TodoDetailStore extends SnapStore<TodoDetailState, "fetch"> {
       this.state.set("todo", todo);
     });
   }
-
-  reset() {
-    this.state.set("todo", null);
-    this.resetStatus("fetch");
-  }
 }

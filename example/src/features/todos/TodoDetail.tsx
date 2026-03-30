@@ -1,5 +1,6 @@
 import { Link } from "react-router";
-import { todoDetailStore } from "../../stores";
+import { SnapStore } from "snapstate/react";
+import { TodoDetailStore } from "./TodoDetailStore";
 import type { Todo } from "../../shared/types";
 import type { AsyncStatus } from "snapstate";
 
@@ -41,9 +42,9 @@ const TodoDetailView = ({ todo, status, error }: TodoDetailViewProps) => {
   );
 };
 
-export const TodoDetail = todoDetailStore.connect(TodoDetailView, {
-  select: (pick) => ({ todo: pick("todo") }),
-  fetch: (s, props) => s.fetchTodo(props.id),
-  cleanup: (s) => s.reset(),
+export const TodoDetail = SnapStore.scoped(TodoDetailView, {
+  factory: () => new TodoDetailStore(),
+  props: (store) => ({ todo: store.getSnapshot().todo }),
+  fetch: (store, props) => store.fetchTodo(props.id),
   deps: (props) => [props.id],
 });
