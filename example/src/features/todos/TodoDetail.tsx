@@ -10,7 +10,7 @@ interface TodoDetailViewProps {
 
 const TodoDetailView = ({ todo }: TodoDetailViewProps) => {
   return (
-    <div className="todo-detail">
+    <>
       {!todo ? (
         <p className="empty-message">Todo not found</p>
       ) : (
@@ -26,15 +26,25 @@ const TodoDetailView = ({ todo }: TodoDetailViewProps) => {
       <Link className="todo-detail-back" to="/todos">
         &larr; Back to list
       </Link>
-    </div>
+    </>
   );
+};
+
+const TodoDetailLayout = ({ children }: { children: React.ReactNode }) => {
+  return <div className="todo-detail">{children}</div>;
 };
 
 export const TodoDetail = SnapStore.scoped(TodoDetailView, {
   factory: () => new TodoDetailStore(),
   props: (store) => ({ todo: store.getSnapshot().todo }),
+  template: TodoDetailLayout,
   loading: () => <div className="loading-spinner" />,
-  error: ({ error }) => <p className="todo-detail-error">Error: {error}</p>,
+  error: ({ error }) => (
+    <TodoDetailLayout>
+      <p className="todo-detail-error">{error}</p>
+      <Link className="todo-detail-back" to="/todos">&larr; Back to list</Link>
+    </TodoDetailLayout>
+  ),
   fetch: (store, props) => store.fetchTodo(props.id),
   deps: (props) => [props.id],
 });
