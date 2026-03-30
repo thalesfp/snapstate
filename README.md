@@ -213,6 +213,34 @@ const ProjectDetail = projectStore.connect(ProjectView, {
 
 `deps` returns a dependency array from the component's own props. When values change, `cleanup` runs for the previous deps, then `fetch` and `setup` re-run. Without `deps`, lifecycle callbacks run once on mount.
 
+### Template
+
+Wrap the connected component in a layout that also receives store-derived props:
+
+```tsx
+function TodoLayout({ remaining, children }: { remaining: number; children: React.ReactNode }) {
+  return (
+    <div className="app">
+      <h1>Todos ({remaining})</h1>
+      {children}
+    </div>
+  );
+}
+
+function TodoAppInner({ remaining }: { remaining: number }) {
+  return <p>{remaining} items left</p>;
+}
+
+const TodoApp = todoStore.connect(TodoAppInner, {
+  select: (pick) => ({ remaining: pick("remaining") }),
+  fetch: (s) => s.loadTodos(),
+  template: TodoLayout,
+  loading: () => <Skeleton />,
+});
+```
+
+The `template` component receives the same mapped props as the inner component, plus `children` (the rendered inner component). It renders after fetch guards, so `children` is always the ready component. Works with `props`, `select`, and `scoped`.
+
 ### Scoped stores
 
 `ReactSnapStore.scoped()` creates a store when the component mounts and destroys it on unmount. Each instance gets its own isolated store — useful for detail views, forms, or modals that need fresh state on every mount.
@@ -362,6 +390,10 @@ npm run build              # Build library first
 cd example && npm install  # Install example deps
 npm run example:dev        # Start dev server
 ```
+
+## Benchmarks
+
+See [BENCHMARKS.md](./BENCHMARKS.md) for detailed performance numbers.
 
 ## License
 

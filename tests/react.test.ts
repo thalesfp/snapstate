@@ -1706,3 +1706,124 @@ describe("scoped", () => {
     expect(screen.getByTestId("val").textContent).toBe("Count: 0");
   });
 });
+
+describe("template", () => {
+  it("wraps connected component with template (props config)", () => {
+    const store = new TestStore();
+
+    function Inner({ count }: { count: number }) {
+      return createElement("span", { "data-testid": "inner" }, count);
+    }
+
+    function Template({ count, children }: { count: number; children: React.ReactNode }) {
+      return createElement("div", { "data-testid": "template" },
+        createElement("h1", null, `Count: ${count}`),
+        children,
+      );
+    }
+
+    const Connected = store.connect(Inner, {
+      props: (s) => ({ count: s.count }),
+      template: Template,
+    });
+
+    render(createElement(Connected));
+    expect(screen.getByTestId("template")).toBeTruthy();
+    expect(screen.getByTestId("template").querySelector("h1")!.textContent).toBe("Count: 0");
+    expect(screen.getByTestId("inner").textContent).toBe("0");
+  });
+
+  it("template receives updated props on store change", async () => {
+    const store = new TestStore();
+
+    function Inner({ count }: { count: number }) {
+      return createElement("span", { "data-testid": "inner" }, count);
+    }
+
+    function Template({ count, children }: { count: number; children: React.ReactNode }) {
+      return createElement("div", { "data-testid": "template" },
+        createElement("span", { "data-testid": "tmpl-count" }, count),
+        children,
+      );
+    }
+
+    const Connected = store.connect(Inner, {
+      props: (s) => ({ count: s.count }),
+      template: Template,
+    });
+
+    render(createElement(Connected));
+    expect(screen.getByTestId("tmpl-count").textContent).toBe("0");
+
+    await actTL(async () => { store.setCount(7); });
+    expect(screen.getByTestId("tmpl-count").textContent).toBe("7");
+    expect(screen.getByTestId("inner").textContent).toBe("7");
+  });
+
+  it("works with select config", () => {
+    const store = new TestStore();
+
+    function Inner({ count }: { count: number }) {
+      return createElement("span", { "data-testid": "inner" }, count);
+    }
+
+    function Template({ count, children }: { count: number; children: React.ReactNode }) {
+      return createElement("div", { "data-testid": "template" },
+        createElement("span", { "data-testid": "tmpl-count" }, count),
+        children,
+      );
+    }
+
+    const Connected = store.connect(Inner, {
+      select: (pick) => ({ count: pick("count") }),
+      template: Template,
+    });
+
+    render(createElement(Connected));
+    expect(screen.getByTestId("tmpl-count").textContent).toBe("0");
+    expect(screen.getByTestId("inner").textContent).toBe("0");
+  });
+
+  it("works with scoped", async () => {
+    function Inner({ count }: { count: number }) {
+      return createElement("span", { "data-testid": "inner" }, count);
+    }
+
+    function Template({ count, children }: { count: number; children: React.ReactNode }) {
+      return createElement("div", { "data-testid": "template" },
+        createElement("span", { "data-testid": "tmpl-count" }, count),
+        children,
+      );
+    }
+
+    const Scoped = SnapStore.scoped(Inner, {
+      factory: () => new TestStore(),
+      props: (s) => ({ count: s.count }),
+      template: Template,
+    });
+
+    render(createElement(Scoped));
+    await actTL(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(screen.getByTestId("tmpl-count").textContent).toBe("0");
+    expect(screen.getByTestId("inner").textContent).toBe("0");
+  });
+
+  it("without template, renders component directly", () => {
+    const store = new TestStore();
+
+    function Inner({ count }: { count: number }) {
+      return createElement("span", { "data-testid": "inner" }, count);
+    }
+
+    const Connected = store.connect(Inner, {
+      props: (s) => ({ count: s.count }),
+    });
+
+    render(createElement(Connected));
+    expect(screen.getByTestId("inner").textContent).toBe("0");
+    expect(screen.queryByTestId("template")).toBeNull();
+  });
+});
