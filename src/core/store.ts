@@ -114,6 +114,26 @@ export function createStore<T extends object>(
     trie.notifyAll();
   }
 
+  function reset(...paths: string[]): void {
+    if (paths.length === 0) {
+      const allKeys = new Set([
+        ...Object.keys(initialState),
+        ...Object.keys(state),
+      ]);
+      batch(() => {
+        for (const p of allKeys) {
+          set(p as any, getAtPath(initialState, p) as any);
+        }
+      });
+    } else {
+      batch(() => {
+        for (const p of paths) {
+          set(p as any, getAtPath(initialState, p) as any);
+        }
+      });
+    }
+  }
+
   function destroy(): void {
     trie.clear();
     pendingPaths.clear();
@@ -128,5 +148,6 @@ export function createStore<T extends object>(
     computed,
     notify,
     destroy,
+    reset,
   } as RawStore<T>;
 }

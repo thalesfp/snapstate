@@ -36,8 +36,7 @@ export class AuthStore extends SnapStore<AuthState, AuthOp> {
   }
 
   logout() {
-    this.state.set("token", null);
-    this.state.set("user", null);
+    this.state.reset();
   }
 
   setUser(user: User) {
