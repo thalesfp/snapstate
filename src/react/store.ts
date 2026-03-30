@@ -21,6 +21,7 @@ interface ConnectConfig<S, MappedProps, Own = OwnProps> {
   deps?: (props: Own) => unknown[];
   loading?: React.ComponentType;
   error?: React.ComponentType<{ error: string }>;
+  template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
 interface ConnectPropsConfig<S, MappedProps, Own = OwnProps> {
@@ -28,6 +29,7 @@ interface ConnectPropsConfig<S, MappedProps, Own = OwnProps> {
   setup?: (store: S, props: Own) => void;
   cleanup?: (store: S, props: Own) => void;
   deps?: (props: Own) => unknown[];
+  template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
 type PickFn<T extends object> = <P extends DotPaths<T>>(path: P) => GetByPath<T, P>;
@@ -40,6 +42,7 @@ interface SelectConnectConfig<T extends object, S, MappedProps, Own = OwnProps> 
   deps?: (props: Own) => unknown[];
   loading?: React.ComponentType;
   error?: React.ComponentType<{ error: string }>;
+  template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
 interface SelectFetchConnectConfig<T extends object, S, MappedProps, Own = OwnProps> extends SelectConnectConfig<T, S, MappedProps, Own> {
@@ -55,6 +58,7 @@ interface ScopedConfig<S, MappedProps, Own = OwnProps> {
   deps?: (ownProps: Own) => unknown[];
   loading?: React.ComponentType;
   error?: React.ComponentType<{ error: string }>;
+  template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
 interface ScopedFetchConfig<S, MappedProps, Own = OwnProps> extends ScopedConfig<S, MappedProps, Own> {
@@ -123,6 +127,17 @@ function renderFetchGuard<S>(
     return createElement(errorComponent, { error: asyncState.error ?? "Unknown error" });
   }
   return null;
+}
+
+function wrapWithTemplate(
+  inner: React.ReactElement,
+  template: React.ComponentType<any> | undefined,
+  mappedProps: Record<string, unknown>,
+): React.ReactElement {
+  if (template) {
+    return createElement(template, mappedProps, inner);
+  }
+  return inner;
 }
 
 function useLifecycle<S>(
@@ -307,12 +322,14 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       const guard = renderFetchGuard(asyncState, fetchConfig);
       if (guard) { return guard; }
 
-      return createElement(Component, {
+      const inner = createElement(Component, {
         ...ownProps,
         ...mappedProps,
         ...(lcConfig.fetchFn ? asyncState : {}),
         ref,
       } as unknown as P);
+
+      return wrapWithTemplate(inner, config?.template, mappedProps);
     });
 
     Connected.displayName = `Connect(${Component.displayName || Component.name || "Component"})`;
@@ -403,12 +420,14 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       const guard = renderFetchGuard(asyncState, fetchConfig);
       if (guard) { return guard; }
 
-      return createElement(Component, {
+      const inner = createElement(Component, {
         ...ownProps,
         ...mappedProps,
         ...(lcConfig.fetchFn ? asyncState : {}),
         ref,
       } as unknown as P);
+
+      return wrapWithTemplate(inner, config.template, mappedProps);
     });
 
     Connected.displayName = `Connect(${Component.displayName || Component.name || "Component"})`;
@@ -522,12 +541,14 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       const guard = renderFetchGuard(asyncState, fetchConfig);
       if (guard) { return guard; }
 
-      return createElement(Component, {
+      const inner = createElement(Component, {
         ...ownProps,
         ...mappedProps,
         ...(lcConfig.fetchFn ? asyncState : {}),
         ref,
       } as unknown as P);
+
+      return wrapWithTemplate(inner, config.template, mappedProps);
     });
 
     Scoped.displayName = `Scoped(${Component.displayName || Component.name || "Component"})`;

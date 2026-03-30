@@ -1,12 +1,14 @@
 import { SnapStore } from "snapstate/react";
 import type { User } from "../../shared/types";
 
-type AuthOp = "login";
+type AuthOp = "login" | "restore";
 
 interface AuthState {
   user: User | null;
   token: string | null;
 }
+
+const TOKEN_KEY = "snapstate_token";
 
 export class AuthStore extends SnapStore<AuthState, AuthOp> {
   constructor() {
@@ -29,6 +31,7 @@ export class AuthStore extends SnapStore<AuthState, AuthOp> {
     return this.api.post<{ token: string; user: User }>("login", "/api/auth/login", {
       body: { email, password },
       onSuccess: (data) => {
+        localStorage.setItem(TOKEN_KEY, data.token);
         this.state.set("token", data.token);
         this.state.set("user", data.user);
       },
@@ -36,7 +39,21 @@ export class AuthStore extends SnapStore<AuthState, AuthOp> {
   }
 
   logout() {
+    localStorage.removeItem(TOKEN_KEY);
     this.state.reset();
+  }
+
+  restore() {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) return;
+    this.state.batch(() => {
+      this.state.set("token", token);
+    });
+    return this.api.get<User>("restore", "/api/auth/me", (user) => {
+      this.state.set("user", user);
+    }).catch(() => {
+      this.logout();
+    });
   }
 
   setUser(user: User) {
@@ -44,6 +61,7 @@ export class AuthStore extends SnapStore<AuthState, AuthOp> {
   }
 
   setToken(token: string) {
+    localStorage.setItem(TOKEN_KEY, token);
     this.state.set("token", token);
   }
 }

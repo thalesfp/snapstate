@@ -346,3 +346,67 @@ describe("connect vs scoped: mount + fetch + unmount", () => {
     await flush();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Template overhead
+// ---------------------------------------------------------------------------
+
+function BenchTemplate({ children }: { count: number; children: any }) {
+  return createElement("div", null, children);
+}
+
+describe("template overhead: mount + unmount", () => {
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  bench("without template", async () => {
+    const store = new ReactBenchStore();
+    const Connected = store.connect(BenchDisplay, {
+      props: (s) => ({ count: s.count }),
+    });
+    const { unmount } = render(createElement(Connected));
+    unmount();
+    store.destroy();
+    await flush();
+  });
+
+  bench("with template", async () => {
+    const store = new ReactBenchStore();
+    const Connected = store.connect(BenchDisplay, {
+      props: (s) => ({ count: s.count }),
+      template: BenchTemplate,
+    });
+    const { unmount } = render(createElement(Connected));
+    unmount();
+    store.destroy();
+    await flush();
+  });
+});
+
+describe("template overhead: mount + update + unmount", () => {
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  bench("without template", async () => {
+    const store = new ReactBenchStore();
+    const Connected = store.connect(BenchDisplay, {
+      props: (s) => ({ count: s.count }),
+    });
+    const { unmount } = render(createElement(Connected));
+    await act(async () => { store.increment(); });
+    unmount();
+    store.destroy();
+    await flush();
+  });
+
+  bench("with template", async () => {
+    const store = new ReactBenchStore();
+    const Connected = store.connect(BenchDisplay, {
+      props: (s) => ({ count: s.count }),
+      template: BenchTemplate,
+    });
+    const { unmount } = render(createElement(Connected));
+    await act(async () => { store.increment(); });
+    unmount();
+    store.destroy();
+    await flush();
+  });
+});

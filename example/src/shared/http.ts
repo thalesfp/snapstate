@@ -9,4 +9,5 @@ export function setupHttpClient() {
     setDefaultHeaders(headers);
     setFormDefaultHeaders(headers);
   });
+  authStore.restore();
 }
