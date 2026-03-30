@@ -1,7 +1,13 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { bench, describe } from "vitest";
 import { createStore } from "../src/core/store.js";
 import { SubscriptionTrie } from "../src/core/trie.js";
 import { applyUpdate } from "../src/core/structural.js";
+import { render, act } from "@testing-library/react";
+import { createElement } from "react";
+import { SnapStore } from "../src/react/index.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -215,5 +221,128 @@ describe("e2e: set with many subscribers", () => {
 
   bench("set + notify (10 subscribers on path)", () => {
     store.set("f0", (v: any) => v + 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// React: connect vs scoped
+// ---------------------------------------------------------------------------
+
+interface ReactBenchState {
+  count: number;
+  items: { id: number; text: string }[];
+}
+
+class ReactBenchStore extends SnapStore<ReactBenchState> {
+  constructor() {
+    super({
+      count: 0,
+      items: Array.from({ length: 100 }, (_, i) => ({ id: i, text: `item ${i}` })),
+    });
+  }
+
+  get count() {
+    return this.state.get("count");
+  }
+
+  increment() {
+    this.state.set("count", (c) => c + 1);
+  }
+}
+
+function BenchDisplay({ count }: { count: number }) {
+  return createElement("span", null, count);
+}
+
+describe("store creation overhead", () => {
+  bench("create store", () => {
+    new ReactBenchStore();
+  });
+
+  bench("create + destroy store", () => {
+    const s = new ReactBenchStore();
+    s.destroy();
+  });
+});
+
+describe("connect vs scoped: mount + unmount", () => {
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  bench("connect", async () => {
+    const store = new ReactBenchStore();
+    const Connected = store.connect(BenchDisplay, (s) => ({ count: s.count }));
+    const { unmount } = render(createElement(Connected));
+    unmount();
+    store.destroy();
+    await flush();
+  });
+
+  bench("scoped", async () => {
+    const Scoped = SnapStore.scoped(BenchDisplay, {
+      factory: () => new ReactBenchStore(),
+      props: (s) => ({ count: s.count }),
+    });
+    const { unmount } = render(createElement(Scoped));
+    unmount();
+    await flush();
+  });
+});
+
+describe("connect vs scoped: mount + update + unmount", () => {
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  bench("connect", async () => {
+    const store = new ReactBenchStore();
+    const Connected = store.connect(BenchDisplay, (s) => ({ count: s.count }));
+    const { unmount } = render(createElement(Connected));
+    await act(async () => { store.increment(); });
+    unmount();
+    store.destroy();
+    await flush();
+  });
+
+  bench("scoped", async () => {
+    let ref: ReactBenchStore | null = null;
+    const Scoped = SnapStore.scoped(BenchDisplay, {
+      factory: () => { ref = new ReactBenchStore(); return ref; },
+      props: (s) => ({ count: s.count }),
+    });
+    const { unmount } = render(createElement(Scoped));
+    await act(async () => { ref!.increment(); });
+    unmount();
+    await flush();
+  });
+});
+
+describe("connect vs scoped: mount + fetch + unmount", () => {
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  function StatusDisplay({ count }: { count: number; status: any; error: any }) {
+    return createElement("span", null, count);
+  }
+
+  bench("connect", async () => {
+    const store = new ReactBenchStore();
+    const Connected = store.connect(StatusDisplay, {
+      props: (s) => ({ count: s.count }),
+      fetch: async () => {},
+    });
+    let unmount: () => void;
+    await act(async () => { ({ unmount } = render(createElement(Connected))); });
+    unmount!();
+    store.destroy();
+    await flush();
+  });
+
+  bench("scoped", async () => {
+    const Scoped = SnapStore.scoped(StatusDisplay, {
+      factory: () => new ReactBenchStore(),
+      props: (s) => ({ count: s.count }),
+      fetch: async () => {},
+    });
+    let unmount: () => void;
+    await act(async () => { ({ unmount } = render(createElement(Scoped))); });
+    unmount!();
+    await flush();
   });
 });

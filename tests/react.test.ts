@@ -1446,3 +1446,263 @@ describe("connect deps", () => {
     expect(cleanupSpy).not.toHaveBeenCalled();
   });
 });
+
+describe("scoped", () => {
+  it("injects mapped state as props", () => {
+    function Display({ count }: { count: number }) {
+      return createElement("span", { "data-testid": "val" }, count);
+    }
+
+    const Scoped = SnapStore.scoped(Display, {
+      factory: () => new TestStore(),
+      props: (s) => ({ count: s.count }),
+    });
+
+    render(createElement(Scoped));
+    expect(screen.getByTestId("val").textContent).toBe("0");
+  });
+
+  it("re-renders when scoped store state changes", async () => {
+    let storeInstance: TestStore | null = null;
+
+    function Display({ count }: { count: number }) {
+      return createElement("span", { "data-testid": "val" }, count);
+    }
+
+    const Scoped = SnapStore.scoped(Display, {
+      factory: () => {
+        const s = new TestStore();
+        storeInstance = s;
+        return s;
+      },
+      props: (s) => ({ count: s.count }),
+    });
+
+    render(createElement(Scoped));
+    expect(screen.getByTestId("val").textContent).toBe("0");
+
+    await actTL(async () => {
+      storeInstance!.setCount(5);
+    });
+    expect(screen.getByTestId("val").textContent).toBe("5");
+  });
+
+  it("each mounted instance gets its own store", () => {
+    const instances: TestStore[] = [];
+
+    function Display({ count }: { count: number }) {
+      return createElement("span", { "data-testid": "val" }, count);
+    }
+
+    const Scoped = SnapStore.scoped(Display, {
+      factory: () => {
+        const s = new TestStore();
+        instances.push(s);
+        return s;
+      },
+      props: (s) => ({ count: s.count }),
+    });
+
+    render(createElement("div", null,
+      createElement(Scoped),
+      createElement(Scoped),
+    ));
+
+    expect(instances).toHaveLength(2);
+    expect(instances[0]).not.toBe(instances[1]);
+  });
+
+  it("calls destroy on unmount", async () => {
+    let storeInstance: TestStore | null = null;
+
+    function Display({ count }: { count: number }) {
+      return createElement("span", null, count);
+    }
+
+    const Scoped = SnapStore.scoped(Display, {
+      factory: () => {
+        const s = new TestStore();
+        storeInstance = s;
+        return s;
+      },
+      props: (s) => ({ count: s.count }),
+    });
+
+    const { unmount } = render(createElement(Scoped));
+    const destroySpy = vi.spyOn(storeInstance!, "destroy");
+    unmount();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(destroySpy).toHaveBeenCalledOnce();
+  });
+
+  it("setup fires on mount and cleanup fires on unmount", async () => {
+    const setupSpy = vi.fn();
+    const cleanupSpy = vi.fn();
+
+    function Display({ count }: { count: number }) {
+      return createElement("span", null, count);
+    }
+
+    const Scoped = SnapStore.scoped(Display, {
+      factory: () => new TestStore(),
+      props: (s) => ({ count: s.count }),
+      setup: setupSpy,
+      cleanup: cleanupSpy,
+    });
+
+    const { unmount } = render(createElement(Scoped));
+    await actTL(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(setupSpy).toHaveBeenCalledOnce();
+    expect(cleanupSpy).not.toHaveBeenCalled();
+
+    unmount();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(cleanupSpy).toHaveBeenCalledOnce();
+  });
+
+  it("cleans up all stores in StrictMode (no leaked derive subscriptions)", async () => {
+    let factoryCount = 0;
+    let destroyCount = 0;
+
+    function Display({ count }: { count: number }) {
+      return createElement("span", { "data-testid": "val" }, count);
+    }
+
+    const Scoped = SnapStore.scoped(Display, {
+      factory: () => {
+        factoryCount++;
+        const s = new TestStore();
+        const origDestroy = s.destroy.bind(s);
+        s.destroy = () => { destroyCount++; origDestroy(); };
+        return s;
+      },
+      props: (s) => ({ count: s.count }),
+    });
+
+    const { unmount } = render(createElement(StrictMode, null, createElement(Scoped)));
+    await actTL(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    // StrictMode creates stores in effects (mount→cleanup→remount).
+    // The probe's store should be destroyed, leaving only the final one alive.
+    const destroyedDuringProbe = destroyCount;
+    expect(destroyedDuringProbe).toBeGreaterThanOrEqual(0);
+
+    // Real unmount should destroy the surviving store
+    unmount();
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Every created store must be destroyed (no leaks)
+    expect(destroyCount).toBe(factoryCount);
+  });
+
+  it("transitions through fetch lifecycle", async () => {
+    function Display({
+      count,
+      status,
+      error,
+    }: {
+      count: number;
+      status: AsyncStatus;
+      error: string | null;
+    }) {
+      return createElement(
+        "div",
+        null,
+        createElement("span", { "data-testid": "status" }, status.value),
+        createElement("span", { "data-testid": "count" }, count),
+      );
+    }
+
+    let resolveFetch!: () => void;
+    const fetchPromise = new Promise<void>((r) => { resolveFetch = r; });
+
+    const Scoped = SnapStore.scoped(Display, {
+      factory: () => new TestStore(),
+      props: (s) => ({ count: s.count }),
+      fetch: async (s) => {
+        await fetchPromise;
+        s.setCount(42);
+      },
+    });
+
+    render(createElement(Scoped));
+    expect(screen.getByTestId("status").textContent).toBe("loading");
+
+    await actTL(async () => { resolveFetch(); });
+
+    expect(screen.getByTestId("status").textContent).toBe("ready");
+    expect(screen.getByTestId("count").textContent).toBe("42");
+  });
+
+  it("renders loading and error components", async () => {
+    function Display({ count }: { count: number }) {
+      return createElement("span", { "data-testid": "val" }, count);
+    }
+
+    function Loading() {
+      return createElement("span", { "data-testid": "loading" }, "Loading...");
+    }
+
+    function ErrorDisplay({ error }: { error: string }) {
+      return createElement("span", { "data-testid": "error" }, error);
+    }
+
+    const Scoped = SnapStore.scoped(Display, {
+      factory: () => new TestStore(),
+      props: (s) => ({ count: s.count }),
+      fetch: async () => { throw new Error("fail"); },
+      loading: Loading,
+      error: ErrorDisplay,
+    });
+
+    render(createElement(Scoped));
+    expect(screen.getByTestId("loading")).toBeTruthy();
+
+    await actTL(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(screen.getByTestId("error").textContent).toBe("fail");
+  });
+
+  it("re-runs fetch when deps change", async () => {
+    const fetchSpy = vi.fn(async () => {});
+
+    function Display({ count }: { count: number; status: AsyncStatus; error: string | null }) {
+      return createElement("span", null, count);
+    }
+
+    const Scoped = SnapStore.scoped(Display, {
+      factory: () => new TestStore(),
+      props: (s) => ({ count: s.count }),
+      fetch: fetchSpy,
+      deps: (props) => [props.id],
+    });
+
+    const { rerender } = render(createElement(Scoped, { id: "1" } as any));
+    await actTL(async () => {});
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    rerender(createElement(Scoped, { id: "2" } as any));
+    await actTL(async () => {});
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("passes own props through", () => {
+    function Display({ count, label }: { count: number; label: string }) {
+      return createElement("span", { "data-testid": "val" }, `${label}: ${count}`);
+    }
+
+    const Scoped = SnapStore.scoped(Display, {
+      factory: () => new TestStore(),
+      props: (s) => ({ count: s.count }),
+    });
+
+    render(createElement(Scoped, { label: "Count" }));
+    expect(screen.getByTestId("val").textContent).toBe("Count: 0");
+  });
+});

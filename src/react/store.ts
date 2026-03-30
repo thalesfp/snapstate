@@ -46,6 +46,21 @@ interface SelectFetchConnectConfig<T extends object, S, MappedProps, Own = OwnPr
   fetch: (store: S, props: Own) => Promise<void>;
 }
 
+interface ScopedConfig<S, MappedProps, Own = OwnProps> {
+  factory: () => S;
+  props: (store: S) => MappedProps;
+  fetch?: (store: S, ownProps: Own) => Promise<void>;
+  setup?: (store: S, ownProps: Own) => void;
+  cleanup?: (store: S, ownProps: Own) => void;
+  deps?: (ownProps: Own) => unknown[];
+  loading?: React.ComponentType;
+  error?: React.ComponentType<{ error: string }>;
+}
+
+interface ScopedFetchConfig<S, MappedProps, Own = OwnProps> extends ScopedConfig<S, MappedProps, Own> {
+  fetch: (store: S, ownProps: Own) => Promise<void>;
+}
+
 interface FetchConfig<S> {
   fetchFn?: (store: S) => Promise<void>;
   deps?: unknown[];
@@ -398,5 +413,124 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
 
     Connected.displayName = `Connect(${Component.displayName || Component.name || "Component"})`;
     return Connected as unknown as React.FC<Omit<P, keyof MappedProps>>;
+  }
+
+  /** Create a component-scoped store: instantiated on mount, destroyed on unmount. */
+  static scoped<
+    S extends ReactSnapStore<any, any>,
+    P extends object,
+    MappedProps extends Record<string, unknown>,
+  >(
+    Component: React.ComponentType<P>,
+    config: ScopedFetchConfig<S, MappedProps, Omit<P, keyof MappedProps | "status" | "error">>,
+  ): React.FC<Omit<P, keyof MappedProps | "status" | "error">>;
+  static scoped<
+    S extends ReactSnapStore<any, any>,
+    P extends object,
+    MappedProps extends Record<string, unknown>,
+  >(
+    Component: React.ComponentType<P>,
+    config: ScopedConfig<S, MappedProps, Omit<P, keyof MappedProps>>,
+  ): React.FC<Omit<P, keyof MappedProps>>;
+  static scoped<
+    S extends ReactSnapStore<any, any>,
+    P extends object,
+    MappedProps extends Record<string, unknown>,
+  >(
+    Component: React.ComponentType<P>,
+    config: ScopedConfig<S, MappedProps>,
+  ): React.FC<Omit<P, keyof MappedProps>> {
+    const lcConfig = {
+      fetchFn: config.fetch,
+      setupFn: config.setup,
+      cleanupFn: config.cleanup,
+      depsFn: config.deps,
+      loadingComponent: config.loading,
+      errorComponent: config.error,
+    } as LifecycleConfig<S>;
+
+    const Scoped = forwardRef<unknown, Omit<P, keyof MappedProps>>(function Scoped(ownProps, ref) {
+      const [store, setStore] = useState<S | null>(null);
+
+      // Create store in effect so StrictMode properly pairs creation with cleanup.
+      // Render-time creation (useRef lazy init) leaks stores whose constructor has
+      // side effects (e.g. derive subscriptions) because discarded StrictMode
+      // renders never run effect cleanup.
+      useEffect(() => {
+        const newStore = config.factory();
+        setStore(newStore);
+        return () => { newStore.destroy(); };
+      }, []);
+
+      const cachedRef = useRef<{ revision: number; props: MappedProps } | null>(null);
+      const revisionRef = useRef(0);
+
+      const own = ownProps as OwnProps;
+      const baseDeps = lcConfig.depsFn ? lcConfig.depsFn(own) : undefined;
+      // Include store in deps so lifecycle hooks re-fire when store becomes available
+      const deps = baseDeps !== undefined ? [...baseDeps, store] : [store];
+
+      const fetchFn = store && lcConfig.fetchFn
+        ? (s: S) => lcConfig.fetchFn!(s, own)
+        : undefined;
+      const setupFn = store && lcConfig.setupFn
+        ? (s: S) => lcConfig.setupFn!(s, own)
+        : undefined;
+      const cleanupFn = store && lcConfig.cleanupFn
+        ? (s: S) => lcConfig.cleanupFn!(s, own)
+        : undefined;
+
+      const subscribe = useCallback(
+        (cb: () => void) => {
+          if (!store) return () => {};
+          return store.subscribe(() => {
+            revisionRef.current++;
+            cb();
+          });
+        },
+        [store],
+      );
+
+      const getSnapshot = useCallback(() => {
+        if (!store) return null as unknown as MappedProps;
+        const currentRevision = revisionRef.current;
+        if (cachedRef.current && cachedRef.current.revision === currentRevision) {
+          return cachedRef.current.props;
+        }
+        const next = config.props(store);
+        if (cachedRef.current && shallowEqual(cachedRef.current.props, next)) {
+          cachedRef.current = { revision: currentRevision, props: cachedRef.current.props };
+          return cachedRef.current.props;
+        }
+        cachedRef.current = { revision: currentRevision, props: next };
+        return next;
+      }, [store]);
+
+      const mappedProps = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+      useLifecycle(store as S, setupFn, cleanupFn, deps);
+
+      const fetchConfig: FetchConfig<S> = {
+        fetchFn, deps,
+        loadingComponent: lcConfig.loadingComponent,
+        errorComponent: lcConfig.errorComponent,
+      };
+      const asyncState = useFetchLifecycle(store as S, fetchConfig);
+
+      if (!store) return null;
+
+      const guard = renderFetchGuard(asyncState, fetchConfig);
+      if (guard) { return guard; }
+
+      return createElement(Component, {
+        ...ownProps,
+        ...mappedProps,
+        ...(lcConfig.fetchFn ? asyncState : {}),
+        ref,
+      } as unknown as P);
+    });
+
+    Scoped.displayName = `Scoped(${Component.displayName || Component.name || "Component"})`;
+    return Scoped as unknown as React.FC<Omit<P, keyof MappedProps>>;
   }
 }

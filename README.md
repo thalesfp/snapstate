@@ -211,6 +211,34 @@ const ProjectDetail = projectStore.connect(ProjectView, {
 
 `deps` returns a dependency array from the component's own props. When values change, `cleanup` runs for the previous deps, then `fetch` and `setup` re-run. Without `deps`, lifecycle callbacks run once on mount.
 
+### Scoped stores
+
+`ReactSnapStore.scoped()` creates a store when the component mounts and destroys it on unmount. Each instance gets its own isolated store — useful for detail views, forms, or modals that need fresh state on every mount.
+
+```tsx
+import { ReactSnapStore } from "@thalesfp/snapstate/react";
+
+class TodoDetailStore extends ReactSnapStore<{ todo: Todo | null }, "fetch"> {
+  constructor() {
+    super({ todo: null });
+  }
+
+  fetchTodo(id: string) {
+    return this.api.get("fetch", `/api/todos/${id}`, (todo) => this.state.set("todo", todo));
+  }
+}
+
+const TodoDetail = ReactSnapStore.scoped(TodoDetailView, {
+  factory: () => new TodoDetailStore(),
+  props: (store) => ({ todo: store.getSnapshot().todo }),
+  fetch: (store, props) => store.fetchTodo(props.id),
+  deps: (props) => [props.id],
+  loading: () => <Skeleton />,
+});
+```
+
+No manual `cleanup` or `reset()` needed — `destroy()` runs automatically on unmount. All lifecycle options (`setup`, `cleanup`, `fetch`, `deps`, `loading`, `error`) work the same as in `connect`.
+
 ## Forms
 
 `SnapFormStore<V, K>` extends `ReactSnapStore`. Available from `@thalesfp/snapstate/form`. Requires `zod` peer dependency.
