@@ -3,38 +3,43 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 
+vi.mock("snapstate/react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("snapstate/react")>();
+  return { ...actual, connect: () => (target: any) => target };
+});
+
 vi.mock("../../stores", () => ({
   todoStore: {
-    connect: vi.fn(() => () => null),
     toggleTodo: vi.fn().mockResolvedValue(undefined),
     editTodo: vi.fn().mockResolvedValue(undefined),
     removeTodo: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
-import { TodoItemInner } from "./TodoItem";
+import { TodoItem } from "./TodoItem";
 import { todoStore } from "../../stores";
 import { asyncStatus } from "snapstate/react";
 
+const C = TodoItem as any;
 const todo = { id: "1", text: "Test todo", completed: false };
 const idle = { status: asyncStatus("idle"), error: null };
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <MemoryRouter>{children}</MemoryRouter>
 );
 
-describe("TodoItemInner", () => {
+describe("TodoItem", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("renders todo text", () => {
-    render(<TodoItemInner todo={todo} editState={idle} />, { wrapper });
+    render(<C todo={todo} editState={idle} />, { wrapper });
     expect(screen.getByText("Test todo")).toBeTruthy();
   });
 
   it("applies completed class when todo is completed", () => {
     const { container } = render(
-      <TodoItemInner todo={{ ...todo, completed: true }} editState={idle} />,
+      <C todo={{ ...todo, completed: true }} editState={idle} />,
       { wrapper },
     );
     expect(container.querySelector("li")!.className).toContain("completed");
@@ -42,7 +47,7 @@ describe("TodoItemInner", () => {
 
   it("does not apply completed class when todo is active", () => {
     const { container } = render(
-      <TodoItemInner todo={todo} editState={idle} />,
+      <C todo={todo} editState={idle} />,
       { wrapper },
     );
     expect(container.querySelector("li")!.className).not.toContain("completed");
@@ -50,7 +55,7 @@ describe("TodoItemInner", () => {
 
   it("checks the checkbox when completed", () => {
     const { container } = render(
-      <TodoItemInner todo={{ ...todo, completed: true }} editState={idle} />,
+      <C todo={{ ...todo, completed: true }} editState={idle} />,
       { wrapper },
     );
     const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
@@ -59,7 +64,7 @@ describe("TodoItemInner", () => {
 
   it("unchecks the checkbox when active", () => {
     const { container } = render(
-      <TodoItemInner todo={todo} editState={idle} />,
+      <C todo={todo} editState={idle} />,
       { wrapper },
     );
     const checkbox = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
@@ -68,7 +73,7 @@ describe("TodoItemInner", () => {
 
   it("calls toggleTodo on checkbox click", async () => {
     const { container } = render(
-      <TodoItemInner todo={todo} editState={idle} />,
+      <C todo={todo} editState={idle} />,
       { wrapper },
     );
     const checkbox = container.querySelector('input[type="checkbox"]')!;
@@ -78,7 +83,7 @@ describe("TodoItemInner", () => {
 
   it("calls removeTodo on delete button click", async () => {
     const { container } = render(
-      <TodoItemInner todo={todo} editState={idle} />,
+      <C todo={todo} editState={idle} />,
       { wrapper },
     );
     await userEvent.click(container.querySelector(".delete-btn")!);
@@ -86,14 +91,14 @@ describe("TodoItemInner", () => {
   });
 
   it("enters edit mode on double-click", async () => {
-    render(<TodoItemInner todo={todo} editState={idle} />, { wrapper });
+    render(<C todo={todo} editState={idle} />, { wrapper });
     await userEvent.dblClick(screen.getByText("Test todo"));
     expect(screen.getByDisplayValue("Test todo")).toBeTruthy();
   });
 
   it("calls editTodo on Enter in edit mode", async () => {
     const { container } = render(
-      <TodoItemInner todo={todo} editState={idle} />,
+      <C todo={todo} editState={idle} />,
       { wrapper },
     );
     await userEvent.dblClick(screen.getByText("Test todo"));
@@ -105,7 +110,7 @@ describe("TodoItemInner", () => {
 
   it("cancels editing on Escape", async () => {
     const { container } = render(
-      <TodoItemInner todo={todo} editState={idle} />,
+      <C todo={todo} editState={idle} />,
       { wrapper },
     );
     await userEvent.dblClick(screen.getByText("Test todo"));
@@ -118,7 +123,7 @@ describe("TodoItemInner", () => {
 
   it("exits edit mode after saving", async () => {
     const { container } = render(
-      <TodoItemInner todo={todo} editState={idle} />,
+      <C todo={todo} editState={idle} />,
       { wrapper },
     );
     await userEvent.dblClick(screen.getByText("Test todo"));

@@ -13,7 +13,7 @@ import type { StoreOptions, AsyncStatus, DotPaths, GetByPath } from "../core/typ
 
 type OwnProps = Record<string, unknown>;
 
-interface ConnectConfig<S, MappedProps, Own = OwnProps> {
+export interface ConnectConfig<S, MappedProps, Own = OwnProps> {
   props: (store: S) => MappedProps;
   setup?: (store: S, props: Own) => void;
   fetch: (store: S, props: Own) => Promise<void>;
@@ -24,7 +24,7 @@ interface ConnectConfig<S, MappedProps, Own = OwnProps> {
   template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
-interface ConnectPropsConfig<S, MappedProps, Own = OwnProps> {
+export interface ConnectPropsConfig<S, MappedProps, Own = OwnProps> {
   props: (store: S) => MappedProps;
   setup?: (store: S, props: Own) => void;
   cleanup?: (store: S, props: Own) => void;
@@ -32,9 +32,9 @@ interface ConnectPropsConfig<S, MappedProps, Own = OwnProps> {
   template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
-type PickFn<T extends object> = <P extends DotPaths<T>>(path: P) => GetByPath<T, P>;
+export type PickFn<T extends object> = <P extends DotPaths<T>>(path: P) => GetByPath<T, P>;
 
-interface SelectConnectConfig<T extends object, S, MappedProps, Own = OwnProps> {
+export interface SelectConnectConfig<T extends object, S, MappedProps, Own = OwnProps> {
   select: (pick: PickFn<T>) => MappedProps;
   fetch?: (store: S, props: Own) => Promise<void>;
   setup?: (store: S, props: Own) => void;
@@ -45,7 +45,7 @@ interface SelectConnectConfig<T extends object, S, MappedProps, Own = OwnProps> 
   template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
-interface SelectFetchConnectConfig<T extends object, S, MappedProps, Own = OwnProps> extends SelectConnectConfig<T, S, MappedProps, Own> {
+export interface SelectFetchConnectConfig<T extends object, S, MappedProps, Own = OwnProps> extends SelectConnectConfig<T, S, MappedProps, Own> {
   fetch: (store: S, props: Own) => Promise<void>;
 }
 

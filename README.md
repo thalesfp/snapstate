@@ -269,6 +269,93 @@ const TodoDetail = ReactSnapStore.scoped(TodoDetailView, {
 
 No manual `cleanup` or `reset()` needed — `destroy()` runs automatically on unmount. All lifecycle options (`setup`, `cleanup`, `fetch`, `deps`, `loading`, `error`) work the same as in `connect`.
 
+## Decorator
+
+The `connect` decorator is an alternative to the `store.connect()` HOC for class components. Import it from `@thalesfp/snapstate/react`.
+
+```tsx
+import { Component } from "react";
+import { connect } from "@thalesfp/snapstate/react";
+
+@connect(userStore, {
+  props: (s: typeof userStore) => ({ name: s.getSnapshot().user.name }),
+})
+class UserName extends Component<{ name: string }> {
+  render() {
+    return <span>{this.props.name}</span>;
+  }
+}
+```
+
+### Granular subscriptions
+
+Use `PickFn<State>` from `@thalesfp/snapstate/react` to type the `select` callback:
+
+```tsx
+import { connect } from "@thalesfp/snapstate/react";
+import type { PickFn } from "@thalesfp/snapstate/react";
+
+@connect(userStore, {
+  select: (pick: PickFn<UserState>) => ({
+    name: pick("user.name"),
+    avatar: pick("user.avatar"),
+  }),
+})
+class UserCard extends Component<{ name: string; avatar: string }> {
+  render() {
+    return <img src={this.props.avatar} alt={this.props.name} />;
+  }
+}
+```
+
+### Data fetching
+
+```tsx
+@connect(todoStore, {
+  props: (s: typeof todoStore) => ({ todos: s.todos }),
+  fetch: (s: typeof todoStore) => s.loadTodos(),
+  cleanup: (s: typeof todoStore) => s.reset(),
+  loading: () => <Skeleton />,
+  error: ({ error }) => <p>{error}</p>,
+})
+class TodoList extends Component<{ todos: Todo[] }> {
+  render() { /* ... */ }
+}
+```
+
+All lifecycle options (`setup`, `fetch`, `cleanup`, `deps`, `loading`, `error`, `template`) work the same as the HOC.
+
+### TypeScript notes
+
+TC39 decorators have two known TypeScript limitations:
+
+- **Callback params need explicit types.** Use `typeof storeInstance` for `props`/`cleanup`/`fetch` callbacks, or `PickFn<State>` for `select`. TypeScript cannot infer these through decorator factory arguments ([microsoft/TypeScript#37300](https://github.com/microsoft/TypeScript/issues/37300)).
+
+- **Injected props are not stripped from the class type.** The decorated class keeps its original prop signature, so parent components rendering it without the injected props will need `@ts-expect-error` ([microsoft/TypeScript#4881](https://github.com/microsoft/TypeScript/issues/4881)).
+
+If full type inference and prop stripping are important, use the `store.connect()` HOC instead.
+
+### Babel setup
+
+TC39 decorators require Babel support in Vite projects:
+
+```bash
+npm install -D @babel/plugin-proposal-decorators
+```
+
+```ts
+// vite.config.ts
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react({
+    babel: {
+      plugins: [["@babel/plugin-proposal-decorators", { version: "2023-11" }]],
+    },
+  })],
+});
+```
+
 ## Forms
 
 `SnapFormStore<V, K>` extends `ReactSnapStore`. Available from `@thalesfp/snapstate/form`. Requires `zod` peer dependency.
