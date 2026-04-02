@@ -1,8 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
+vi.mock("snapstate/react", () => ({
+  connect: () => (target: any) => target,
+}));
+
 vi.mock("../../stores", () => ({
-  todoStore: { connect: vi.fn(() => () => null) },
+  todoStore: {},
 }));
 
 vi.mock("./TodoItem", () => ({
@@ -11,11 +15,13 @@ vi.mock("./TodoItem", () => ({
   ),
 }));
 
-import { TodoListInner } from "./TodoList";
+import { TodoList } from "./TodoList";
+
+const C = TodoList as any;
 
 describe("TodoList", () => {
   it("shows empty message when there are no todos", () => {
-    render(<TodoListInner todos={[]} filter="all" />);
+    render(<C todos={[]} filter="all" />);
     expect(screen.getByText("No todos to show")).toBeTruthy();
   });
 
@@ -24,14 +30,14 @@ describe("TodoList", () => {
       { id: "1", text: "First", completed: false },
       { id: "2", text: "Second", completed: true },
     ];
-    render(<TodoListInner todos={todos} filter="all" />);
+    render(<C todos={todos} filter="all" />);
     expect(screen.getByText("First")).toBeTruthy();
     expect(screen.getByText("Second")).toBeTruthy();
   });
 
   it("renders a ul element for non-empty list", () => {
     const todos = [{ id: "1", text: "Task", completed: false }];
-    const { container } = render(<TodoListInner todos={todos} filter="all" />);
+    const { container } = render(<C todos={todos} filter="all" />);
     expect(container.querySelector("ul.todo-list")).toBeTruthy();
   });
 
@@ -40,7 +46,7 @@ describe("TodoList", () => {
       { id: "1", text: "Active", completed: false },
       { id: "2", text: "Done", completed: true },
     ];
-    render(<TodoListInner todos={todos} filter="active" />);
+    render(<C todos={todos} filter="active" />);
     expect(screen.getByText("Active")).toBeTruthy();
     expect(screen.queryByText("Done")).toBeNull();
   });
@@ -50,7 +56,7 @@ describe("TodoList", () => {
       { id: "1", text: "Active", completed: false },
       { id: "2", text: "Done", completed: true },
     ];
-    render(<TodoListInner todos={todos} filter="completed" />);
+    render(<C todos={todos} filter="completed" />);
     expect(screen.getByText("Done")).toBeTruthy();
     expect(screen.queryByText("Active")).toBeNull();
   });

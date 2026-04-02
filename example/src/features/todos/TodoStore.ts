@@ -4,7 +4,7 @@ import type { Todo, Filter, User } from "../../shared/types";
 
 type TodoOp = "fetch" | "add" | "toggle" | "remove" | "edit" | "clearCompleted";
 
-interface TodoState {
+export interface TodoState {
   todos: Todo[];
   filter: Filter;
   userId: string;

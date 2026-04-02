@@ -52,6 +52,7 @@ export function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<GuestRoute />}>
+          {/* @ts-expect-error props injected by @connect decorator */}
           <Route path="/" element={<LoginForm />} />
         </Route>
         <Route element={<ProtectedRoute />}>

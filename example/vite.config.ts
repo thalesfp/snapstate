@@ -13,7 +13,13 @@ export default defineConfig({
       'snapstate': path.join(snapstate, 'dist/index.js'),
     },
   },
-  plugins: [react()],
+  plugins: [react({
+    babel: {
+      plugins: [
+        ["@babel/plugin-proposal-decorators", { version: "2023-11" }],
+      ],
+    },
+  })],
   server: {
     proxy: {
       '/api': 'http://localhost:3001',
