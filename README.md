@@ -271,7 +271,7 @@ No manual `cleanup` or `reset()` needed — `destroy()` runs automatically on un
 
 ## Decorator
 
-The `connect` decorator is an alternative to the `store.connect()` HOC for class components. Import it from `@thalesfp/snapstate/react`.
+The `connect` and `scoped` decorators are an alternative to the HOC API for **class components only**. TC39 decorators cannot be applied to function components — use the `store.connect()` HOC for those. Import decorators from `@thalesfp/snapstate/react`.
 
 ```tsx
 import { Component } from "react";
@@ -362,7 +362,7 @@ TC39 decorators have two known TypeScript limitations:
 
 - **Injected props are not stripped from the class type.** The decorated class keeps its original prop signature, so parent components rendering it without the injected props will need `@ts-expect-error` ([microsoft/TypeScript#4881](https://github.com/microsoft/TypeScript/issues/4881)).
 
-If full type inference and prop stripping are important, use the `store.connect()` HOC instead.
+For function components or when full type inference matters, use the `store.connect()` HOC instead.
 
 ### Vite setup
 
