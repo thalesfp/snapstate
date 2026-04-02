@@ -325,6 +325,35 @@ class TodoList extends Component<{ todos: Todo[] }> {
 
 All lifecycle options (`setup`, `fetch`, `cleanup`, `deps`, `loading`, `error`, `template`) work the same as the HOC.
 
+### Scoped stores
+
+The `scoped` decorator creates a store when the component mounts and destroys it on unmount — the decorator equivalent of `ReactSnapStore.scoped()`.
+
+```tsx
+import { Component } from "react";
+import { scoped } from "@thalesfp/snapstate/react";
+
+class TodoDetailStore extends ReactSnapStore<{ todo: Todo | null }, "fetch"> {
+  constructor() { super({ todo: null }); }
+  fetchTodo(id: string) {
+    return this.api.get("fetch", `/api/todos/${id}`, (todo) => this.state.set("todo", todo));
+  }
+}
+
+@scoped({
+  factory: () => new TodoDetailStore(),
+  props: (store: TodoDetailStore) => ({ todo: store.getSnapshot().todo }),
+  fetch: (store: TodoDetailStore, props: { id: string }) => store.fetchTodo(props.id),
+  deps: (props: { id: string }) => [props.id],
+  loading: () => <Skeleton />,
+})
+class TodoDetail extends Component<{ id: string; todo: Todo | null }> {
+  render() {
+    return this.props.todo ? <h1>{this.props.todo.text}</h1> : <p>Not found</p>;
+  }
+}
+```
+
 ### TypeScript notes
 
 TC39 decorators have two known TypeScript limitations:
@@ -335,22 +364,26 @@ TC39 decorators have two known TypeScript limitations:
 
 If full type inference and prop stripping are important, use the `store.connect()` HOC instead.
 
-### Babel setup
+### Vite setup
 
-TC39 decorators require Babel support in Vite projects:
+TC39 decorators require SWC decorator support in Vite projects:
 
 ```bash
-npm install -D @babel/plugin-proposal-decorators
+npm install -D @vitejs/plugin-react-swc
 ```
 
 ```ts
 // vite.config.ts
-import react from "@vitejs/plugin-react";
+import react from "@vitejs/plugin-react-swc";
 
 export default defineConfig({
   plugins: [react({
-    babel: {
-      plugins: [["@babel/plugin-proposal-decorators", { version: "2023-11" }]],
+    useAtYourOwnRisk_mutateSwcOptions(options) {
+      options.jsc ??= {};
+      options.jsc.parser ??= { syntax: "typescript", tsx: true };
+      options.jsc.parser.decorators = true;
+      options.jsc.transform ??= {};
+      options.jsc.transform.decoratorVersion = '2022-03';
     },
   })],
 });

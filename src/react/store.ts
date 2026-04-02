@@ -49,7 +49,7 @@ export interface SelectFetchConnectConfig<T extends object, S, MappedProps, Own 
   fetch: (store: S, props: Own) => Promise<void>;
 }
 
-interface ScopedConfig<S, MappedProps, Own = OwnProps> {
+export interface ScopedConfig<S, MappedProps, Own = OwnProps> {
   factory: () => S;
   props: (store: S) => MappedProps;
   fetch?: (store: S, ownProps: Own) => Promise<void>;
@@ -61,7 +61,7 @@ interface ScopedConfig<S, MappedProps, Own = OwnProps> {
   template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
-interface ScopedFetchConfig<S, MappedProps, Own = OwnProps> extends ScopedConfig<S, MappedProps, Own> {
+export interface ScopedFetchConfig<S, MappedProps, Own = OwnProps> extends ScopedConfig<S, MappedProps, Own> {
   fetch: (store: S, ownProps: Own) => Promise<void>;
 }
 
@@ -536,7 +536,9 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       };
       const asyncState = useFetchLifecycle(store as S, fetchConfig);
 
-      if (!store) return null;
+      if (!store) {
+        return lcConfig.loadingComponent ? createElement(lcConfig.loadingComponent) : null;
+      }
 
       const guard = renderFetchGuard(asyncState, fetchConfig);
       if (guard) { return guard; }

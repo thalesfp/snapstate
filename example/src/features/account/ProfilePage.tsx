@@ -32,21 +32,34 @@ function ProfilePageInner({
       <form className="profile-form" onSubmit={handleSave}>
         <label>
           Name
-          <input data-testid="profile-name" {...accountStore.register("name")} />
+          <input
+            data-testid="profile-name"
+            {...accountStore.register("name")}
+          />
           {nameError && <span className="field-error">{nameError[0]}</span>}
         </label>
         <label>
           Email
-          <input data-testid="profile-email" {...accountStore.register("email")} />
+          <input
+            data-testid="profile-email"
+            {...accountStore.register("email")}
+          />
           {emailError && <span className="field-error">{emailError[0]}</span>}
         </label>
         <label className="checkbox-label">
-          <input type="checkbox" data-testid="profile-notifications" {...accountStore.register("notifications")} />
+          <input
+            type="checkbox"
+            data-testid="profile-notifications"
+            {...accountStore.register("notifications")}
+          />
           Receive notifications
         </label>
         <label>
           Theme
-          <select data-testid="profile-theme" {...accountStore.register("theme")}>
+          <select
+            data-testid="profile-theme"
+            {...accountStore.register("theme")}
+          >
             <option value="light">Light</option>
             <option value="dark">Dark</option>
             <option value="system">System</option>
@@ -72,6 +85,10 @@ export const ProfilePage = accountStore.connect(ProfilePageInner, {
     themeError: pick("errors.theme"),
     submitStatus: pick("submitStatus"),
   }),
-  setup: (s) => { s.loadCurrentProfile(); },
-  cleanup: (s) => { s.reset(); },
+  setup: (s) => {
+    s.loadCurrentProfile();
+  },
+  cleanup: (s) => {
+    s.reset();
+  },
 });
