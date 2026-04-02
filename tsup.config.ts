@@ -22,4 +22,11 @@ export default defineConfig([
     sourcemap: true,
     external: ["react", "zod"],
   },
+  {
+    entry: { "url/index": "src/url/index.ts" },
+    format: ["esm", "cjs"],
+    dts: true,
+    sourcemap: true,
+    external: ["qs"],
+  },
 ]);

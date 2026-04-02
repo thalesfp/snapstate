@@ -10,6 +10,7 @@ export default defineConfig({
     alias: {
       'snapstate/react': path.join(snapstate, 'dist/react/index.js'),
       'snapstate/form': path.join(snapstate, 'dist/form/index.js'),
+      'snapstate/url': path.join(snapstate, 'dist/url/index.js'),
       'snapstate': path.join(snapstate, 'dist/index.js'),
     },
   },
