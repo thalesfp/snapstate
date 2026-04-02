@@ -2,6 +2,7 @@ import qs from "qs";
 import type { Subscribable, Unsubscribe } from "../core/types.js";
 import { shallowEqual } from "../core/shallow-equal.js";
 
+/** Options for `syncToUrl()`. */
 export interface SyncToUrlOptions<T extends object, P extends Record<string, unknown> = Record<string, unknown>> {
   /** Map from URL param name to a selector on the store's state. */
   params: { [K in keyof P]: (state: T) => P[K] };
@@ -9,6 +10,12 @@ export interface SyncToUrlOptions<T extends object, P extends Record<string, unk
   history?: "replace" | "push";
 }
 
+/**
+ * One-way sync: write selected store state into the URL search params on every change.
+ * Returns an unsubscribe function.
+ * @example
+ * const unsub = syncToUrl(store, { params: { filter: s => s.filter } })
+ */
 export function syncToUrl<T extends object, P extends Record<string, unknown> = Record<string, unknown>>(
   store: Subscribable<T>,
   options: SyncToUrlOptions<T, P>,

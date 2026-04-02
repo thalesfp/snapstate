@@ -21,58 +21,152 @@ function getUrlParams(): Record<string, unknown> {
 
 type OwnProps = Record<string, unknown>;
 
+/** Full connect config with required `fetch` for async data loading on mount. */
 export interface ConnectConfig<S, MappedProps, Own = OwnProps, Params extends Record<string, unknown> = Record<string, unknown>> {
+  /**
+   * Map store state to component props. Called on every store change.
+   * @example props: store => ({ todos: store.getSnapshot().todos })
+   */
   props: (store: S) => MappedProps;
+  /**
+   * Sync side-effect called on mount and whenever `deps` change.
+   * Runs before `fetch`. Use for imperative setup like setting store values from props.
+   * @example setup: (store, ownProps) => store.setFilter(ownProps.initialFilter)
+   */
   setup?: (store: S, props: Own, params: Params) => void;
+  /**
+   * Async function called on mount and whenever `deps` change.
+   * Automatically tracks loading/error status — use `loading` and `error` to render UI for each state.
+   * @example fetch: store => store.fetchTodos()
+   */
   fetch: (store: S, props: Own, params: Params) => Promise<void>;
+  /**
+   * Parse URL search params and pass them as the `params` argument to `fetch`, `setup`, and `deps`.
+   * @example urlParams: { filter: "string" }  // ?filter=active → params.filter === "active"
+   */
   urlParams?: UrlParams<Params>;
+  /**
+   * Called on unmount. Use to cancel subscriptions or reset store state.
+   * @example cleanup: store => store.resetStatus()
+   */
   cleanup?: (store: S, props: Own) => void;
+  /**
+   * Dependency array factory. When any returned value changes, `fetch` and `setup` re-run.
+   * @example deps: (ownProps, params) => [params.filter]
+   */
   deps?: (props: Own, params: Params) => unknown[];
+  /**
+   * Component rendered while `fetch` is in progress (status is `"loading"`).
+   * @example loading: () => <Spinner />
+   */
   loading?: React.ComponentType;
+  /**
+   * Component rendered when `fetch` fails (status is `"error"`). Receives the error message.
+   * @example error: ({ error }) => <p>Failed: {error}</p>
+   */
   error?: React.ComponentType<{ error: string }>;
+  /**
+   * Wrapper component around the connected component. Receives mapped props and `children`.
+   * @example template: AppLayout  // wraps the connected component in AppLayout
+   */
   template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
+/** Connect config with props mapping only — no async `fetch`, so no loading/error states. */
 export interface ConnectPropsConfig<S, MappedProps, Own = OwnProps, Params extends Record<string, unknown> = Record<string, unknown>> {
+  /** Map store state to component props. Called on every store change. */
   props: (store: S) => MappedProps;
+  /** Sync side-effect called on mount and whenever `deps` change. */
   setup?: (store: S, props: Own, params: Params) => void;
+  /** Parse URL search params and pass them as `params` to `setup` and `deps`. */
   urlParams?: UrlParams<Params>;
+  /** Called on unmount. Use to cancel subscriptions or reset store state. */
   cleanup?: (store: S, props: Own) => void;
+  /** Dependency array factory. When any returned value changes, `setup` re-runs. */
   deps?: (props: Own, params: Params) => unknown[];
+  /** Wrapper component around the connected component. Receives mapped props and `children`. */
   template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
+/**
+ * Selector function passed to `select`. Call `pick("path")` to subscribe to specific state paths.
+ * @example select: pick => ({ name: pick("user.name"), count: pick("items").length })
+ */
 export type PickFn<T extends object> = <P extends DotPaths<T>>(path: P) => GetByPath<T, P>;
 
+/**
+ * Connect config using granular path-based subscriptions via `select`.
+ * The component only re-renders when the selected paths change.
+ * Paths are captured once at connect-time — `select` must use a stable set of paths.
+ */
 export interface SelectConnectConfig<T extends object, S, MappedProps, Own = OwnProps, Params extends Record<string, unknown> = Record<string, unknown>> {
+  /**
+   * Granular path-based selector. Use `pick("path")` to subscribe to specific state paths.
+   * @example select: pick => ({ name: pick("user.name"), todos: pick("todos") })
+   */
   select: (pick: PickFn<T>) => MappedProps;
+  /**
+   * Async function called on mount and whenever `deps` change.
+   * When provided, enables `loading` and `error` UI.
+   * @example fetch: store => store.fetchTodos()
+   */
   fetch?: (store: S, props: Own, params: Params) => Promise<void>;
+  /** Parse URL search params and pass them as `params` to `fetch`, `setup`, and `deps`. */
   urlParams?: UrlParams<Params>;
+  /** Sync side-effect called on mount and whenever `deps` change. Runs before `fetch`. */
   setup?: (store: S, props: Own, params: Params) => void;
+  /** Called on unmount. Use to cancel subscriptions or reset store state. */
   cleanup?: (store: S, props: Own) => void;
+  /** Dependency array factory. When any returned value changes, `setup` (and `fetch`, if provided) re-run. */
   deps?: (props: Own, params: Params) => unknown[];
+  /** Component rendered while `fetch` is in progress (status is `"loading"`). */
   loading?: React.ComponentType;
+  /** Component rendered when `fetch` fails (status is `"error"`). Receives the error message. */
   error?: React.ComponentType<{ error: string }>;
+  /** Wrapper component around the connected component. Receives mapped props and `children`. */
   template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
+/** `SelectConnectConfig` variant where `fetch` is required — enables loading/error UI. */
 export interface SelectFetchConnectConfig<T extends object, S, MappedProps, Own = OwnProps, Params extends Record<string, unknown> = Record<string, unknown>> extends SelectConnectConfig<T, S, MappedProps, Own, Params> {
   fetch: (store: S, props: Own, params: Params) => Promise<void>;
 }
 
+/**
+ * Connect config for component-scoped stores. Each mount creates a fresh store instance via `factory`.
+ * The store is destroyed on unmount.
+ */
 export interface ScopedConfig<S, MappedProps, Own = OwnProps, Params extends Record<string, unknown> = Record<string, unknown>> {
+  /**
+   * Factory function that creates a new store instance. Called once per component mount.
+   * @example factory: () => new TodoStore()
+   */
   factory: () => S;
+  /** Map store state to component props. Called on every store change. */
   props: (store: S) => MappedProps;
+  /**
+   * Async function called on mount and whenever `deps` change.
+   * When provided, enables `loading` and `error` UI.
+   * @example fetch: store => store.fetchTodos()
+   */
   fetch?: (store: S, ownProps: Own, params: Params) => Promise<void>;
+  /** Parse URL search params and pass them as `params` to `fetch`, `setup`, and `deps`. */
   urlParams?: UrlParams<Params>;
+  /** Sync side-effect called on mount and whenever `deps` change. Runs before `fetch`. */
   setup?: (store: S, ownProps: Own, params: Params) => void;
+  /** Called on unmount. Use to cancel subscriptions or reset store state. */
   cleanup?: (store: S, ownProps: Own) => void;
+  /** Dependency array factory. When any returned value changes, `setup` (and `fetch`, if provided) re-run. */
   deps?: (ownProps: Own, params: Params) => unknown[];
+  /** Component rendered while `fetch` is in progress (status is `"loading"`). */
   loading?: React.ComponentType;
+  /** Component rendered when `fetch` fails (status is `"error"`). Receives the error message. */
   error?: React.ComponentType<{ error: string }>;
+  /** Wrapper component around the connected component. Receives mapped props and `children`. */
   template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
+/** `ScopedConfig` variant where `fetch` is required — enables loading/error UI. */
 export interface ScopedFetchConfig<S, MappedProps, Own = OwnProps, Params extends Record<string, unknown> = Record<string, unknown>> extends ScopedConfig<S, MappedProps, Own, Params> {
   fetch: (store: S, ownProps: Own, params: Params) => Promise<void>;
 }
@@ -482,6 +576,7 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
     Component: React.ComponentType<P>,
     config: ScopedFetchConfig<S, MappedProps, Omit<P, keyof MappedProps | "status" | "error">>,
   ): React.FC<Omit<P, keyof MappedProps | "status" | "error">>;
+  /** Create a component-scoped store with props mapping only (no fetch). */
   static scoped<
     S extends ReactSnapStore<any, any>,
     P extends object,

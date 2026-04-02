@@ -11,6 +11,13 @@ import { SubscriptionTrie } from "./trie.js";
 import { applyUpdate, getAtPath } from "./structural.js";
 import { createComputed } from "./computed.js";
 
+/**
+ * Create a standalone reactive store (no class required).
+ * @example
+ * const store = createStore({ count: 0 })
+ * store.subscribe("count", () => console.log(store.get("count")))
+ * store.set("count", 1)
+ */
 export function createStore<T extends object>(
   initialState: T,
   options: StoreOptions = {},
