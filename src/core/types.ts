@@ -1,5 +1,7 @@
+/** Possible values for an async operation's lifecycle status. */
 export type AsyncStatusValue = "idle" | "loading" | "ready" | "error";
 
+/** Readonly status object for an async operation. Use the `is*` booleans for conditional logic. */
 export interface AsyncStatus {
   readonly value: AsyncStatusValue;
   readonly isIdle: boolean;
@@ -101,58 +103,176 @@ export interface ApiRequestOptions<R = unknown> {
   onError?: (error: Error) => void;
 }
 
+/** Minimal subscribe + snapshot interface used by React's `useSyncExternalStore`. */
 export interface Subscribable<T extends object> {
   subscribe(callback: Listener): Unsubscribe;
   getSnapshot(): T;
 }
 
+/** Methods for reading and writing store state. Accessed via `this.state` inside a `SnapStore` subclass. */
 export interface StateAccessor<T extends object> {
+  /** Return the full state object. */
   get(): T;
+  /**
+   * Read a nested value by dot-path.
+   * @example this.state.get("user.name") // string
+   */
   get<P extends DotPaths<T>>(path: P): GetByPath<T, P>;
+  /**
+   * Set a nested value by dot-path. Accepts a direct value or an updater function.
+   * @example
+   * this.state.set("count", 5)
+   * this.state.set("count", prev => prev + 1)
+   */
   set<P extends DotPaths<T>>(path: P, value: Updater<GetByPath<T, P>>): void;
+  /**
+   * Group multiple `set()` calls into a single notification.
+   * @example
+   * this.state.batch(() => {
+   *   this.state.set("firstName", "John")
+   *   this.state.set("lastName", "Doe")
+   * })
+   */
   batch(fn: () => void): void;
+  /**
+   * Create a lazy derived value that recomputes only when its dependency paths change.
+   * @example
+   * const fullName = this.state.computed(["firstName", "lastName"],
+   *   s => `${s.firstName} ${s.lastName}`)
+   * fullName.get() // "John Doe"
+   */
   computed<V>(deps: (keyof T & string)[], fn: (state: T) => V): ComputedRef<V>;
+  /**
+   * Append one or more items to the end of an array field.
+   * @example this.state.append("items", newItem)
+   */
   append<P extends ArrayPaths<T>>(path: P, ...items: ElementOf<T[P]>[]): void;
+  /**
+   * Prepend one or more items to the beginning of an array field.
+   * @example this.state.prepend("items", newItem)
+   */
   prepend<P extends ArrayPaths<T>>(path: P, ...items: ElementOf<T[P]>[]): void;
+  /**
+   * Insert one or more items at a specific index in an array field.
+   * @example this.state.insertAt("items", 2, newItem)
+   */
   insertAt<P extends ArrayPaths<T>>(path: P, index: number, ...items: ElementOf<T[P]>[]): void;
+  /**
+   * Partially update items in an array of objects that match a predicate.
+   * @example this.state.patch("todos", t => t.id === 1, { done: true })
+   */
   patch<P extends ObjectArrayPaths<T>>(path: P, predicate: (item: ElementOf<T[P]>) => boolean, updates: Partial<ElementOf<T[P]>>): void;
+  /**
+   * Remove all items from an array field that match a predicate.
+   * @example this.state.remove("todos", t => t.done)
+   */
   remove<P extends ArrayPaths<T>>(path: P, predicate: (item: ElementOf<T[P]>) => boolean): void;
+  /**
+   * Remove an item from an array field by index.
+   * @example this.state.removeAt("items", 0)
+   */
   removeAt<P extends ArrayPaths<T>>(path: P, index: number): void;
+  /**
+   * Read an item from an array field by index. Returns `undefined` if out of bounds.
+   * @example this.state.at("items", 0)
+   */
   at<P extends ArrayPaths<T>>(path: P, index: number): ElementOf<T[P]> | undefined;
+  /**
+   * Return all items from an array field that match a predicate.
+   * @example this.state.filter("todos", t => !t.done)
+   */
   filter<P extends ArrayPaths<T>>(path: P, predicate: (item: ElementOf<T[P]>) => boolean): ElementOf<T[P]>[];
+  /**
+   * Return the first item from an array field that matches a predicate.
+   * @example this.state.find("todos", t => t.id === 1)
+   */
   find<P extends ArrayPaths<T>>(path: P, predicate: (item: ElementOf<T[P]>) => boolean): ElementOf<T[P]> | undefined;
+  /**
+   * Return the index of the first item in an array field that matches a predicate. Returns `-1` if not found.
+   * @example this.state.findIndexOf("todos", t => t.id === 1)
+   */
   findIndexOf<P extends ArrayPaths<T>>(path: P, predicate: (item: ElementOf<T[P]>) => boolean): number;
+  /**
+   * Count items in an array field that match a predicate.
+   * @example this.state.count("todos", t => t.done)
+   */
   count<P extends ArrayPaths<T>>(path: P, predicate: (item: ElementOf<T[P]>) => boolean): number;
+  /**
+   * Reset one or more paths back to their initial values. With no args, resets all top-level keys.
+   * @example this.state.reset("user.name", "count")
+   */
   reset(...paths: DotPaths<T>[]): void;
 }
 
+/** Methods for async operations with automatic status tracking. Accessed via `this.api` inside a `SnapStore` subclass. */
 export interface ApiAccessor<K extends string> {
+  /**
+   * Wrap an async operation with automatic status tracking (`loading` → `ready` / `error`).
+   * Status is tracked under the given `key` and readable via `getStatus(key)`.
+   * @example
+   * await this.api.fetch("todos", async () => {
+   *   const data = await fetchTodos()
+   *   this.state.set("todos", data)
+   * })
+   */
   fetch(key: K, fn: () => Promise<void>): Promise<void>;
+  /**
+   * Perform a GET request. Status is tracked under `key`.
+   * @example await this.api.get("todos", "/api/todos", data => this.state.set("todos", data))
+   */
   get<R = unknown>(key: K, url: string, onSuccess?: (data: R) => void): Promise<void>;
+  /**
+   * Perform a POST request. Status is tracked under `key`.
+   * @example await this.api.post("createTodo", "/api/todos", { body: { title: "New" } })
+   */
   post<R = unknown>(key: K, url: string, options?: ApiRequestOptions<R>): Promise<void>;
+  /**
+   * Perform a PUT request. Status is tracked under `key`.
+   * @example await this.api.put("updateTodo", "/api/todos/1", { body: updated })
+   */
   put<R = unknown>(key: K, url: string, options?: ApiRequestOptions<R>): Promise<void>;
+  /**
+   * Perform a PATCH request. Status is tracked under `key`.
+   * @example await this.api.patch("patchTodo", "/api/todos/1", { body: { done: true } })
+   */
   patch<R = unknown>(key: K, url: string, options?: ApiRequestOptions<R>): Promise<void>;
+  /**
+   * Perform a DELETE request. Status is tracked under `key`.
+   * @example await this.api.delete("removeTodo", "/api/todos/1")
+   */
   delete<R = unknown>(key: K, url: string, options?: ApiRequestOptions<R>): Promise<void>;
 }
 
+/** Standalone reactive store returned by `createStore()`. */
 export interface RawStore<T extends object> extends Subscribable<T> {
+  /** Return the full state object. */
   get(): T;
+  /** Read a nested value by dot-path. */
   get<P extends DotPaths<T>>(path: P): GetByPath<T, P>;
 
+  /** Set a nested value by dot-path. Accepts a direct value or an updater function. */
   set<P extends DotPaths<T>>(path: P, value: Updater<GetByPath<T, P>>): void;
 
+  /** Group multiple `set()` calls into a single notification. */
   batch(fn: () => void): void;
 
+  /** Subscribe to all state changes. */
   subscribe(callback: Listener): Unsubscribe;
+  /** Subscribe to changes at a specific dot-path. */
   subscribe(path: string, callback: Listener): Unsubscribe;
 
+  /** Return the current state (same as `get()`, required by `useSyncExternalStore`). */
   getSnapshot(): T;
 
+  /** Create a lazy derived value that recomputes only when its dependency paths change. */
   computed<V>(deps: (keyof T & string)[], fn: (state: T) => V): ComputedRef<V>;
 
+  /** Force-notify all subscribers (useful after external mutations). */
   notify(): void;
 
+  /** Remove all subscriptions and pending notifications. */
   destroy(): void;
 
+  /** Reset one or more paths to their initial values. With no args, resets all top-level keys. */
   reset(...paths: string[]): void;
 }

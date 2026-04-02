@@ -3,16 +3,22 @@ import { ReactSnapStore } from "../react/store.js";
 import { asyncStatus } from "../core/types.js";
 import type { OperationState } from "../core/types.js";
 
+/** When to run field validation: on form submit, on field blur, or on every change. */
 export type ValidationMode = "onSubmit" | "onBlur" | "onChange";
 
+/** Configuration for a `SnapFormStore`. */
 export interface FormConfig {
+  /** When to trigger field-level validation. */
   validationMode: ValidationMode;
 }
 
+/** Union of native form elements supported by `register()`. */
 export type FormElement = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 
+/** Per-field error messages keyed by field name. */
 export type FormErrors<V> = { [K in keyof V]?: string[] };
 
+/** Internal state shape managed by `SnapFormStore`. */
 export interface FormState<V extends Record<string, unknown>> {
   values: V;
   initial: V;
@@ -20,6 +26,7 @@ export interface FormState<V extends Record<string, unknown>> {
   submitStatus: OperationState;
 }
 
+/** Unwrap a Zod schema to its inner `ZodObject`, or return `null` if not an object schema. */
 export function getObjectSchema(
   schema: z.ZodTypeAny,
 ): z.ZodObject<any> | null {
@@ -34,6 +41,7 @@ const INNER_TYPE_WRAPPERS = new Set([
   "catch", "nonoptional", "success", "readonly",
 ]);
 
+/** Recursively unwrap a Zod schema to its base type name (e.g. `"string"`, `"number"`, `"boolean"`). */
 export function getBaseSchemaType(schema: unknown): string | null {
   if (
     !schema ||
@@ -61,6 +69,12 @@ export function getBaseSchemaType(schema: unknown): string | null {
   return type;
 }
 
+/**
+ * Reactive form store backed by a Zod schema. Handles validation, DOM binding, and submit lifecycle.
+ * @example
+ * const form = new SnapFormStore(schema, { name: "", age: 0 })
+ * // In JSX: <input {...form.register("name")} />
+ */
 export class SnapFormStore<
   V extends Record<string, unknown>,
   K extends string = string,
@@ -89,14 +103,17 @@ export class SnapFormStore<
     };
   }
 
+  /** Current form values. */
   get values(): V {
     return this.state.get("values");
   }
 
+  /** Current per-field validation errors. */
   get errors(): FormErrors<V> {
     return this.state.get("errors");
   }
 
+  /** `true` if any field value differs from its initial value. */
   get isDirty(): boolean {
     const values = this.state.get("values");
     const initial = this.state.get("initial");
@@ -108,11 +125,16 @@ export class SnapFormStore<
     return false;
   }
 
+  /** `true` if there are no validation errors. */
   get isValid(): boolean {
     const errors = this.state.get("errors");
     return Object.keys(errors).length === 0;
   }
 
+  /**
+   * Bind a form field to a native input element. Returns props to spread onto the element.
+   * @example <input {...form.register("email")} />
+   */
   register(field: keyof V & string): {
     ref: (el: FormElement | null) => void;
     name: string;
@@ -168,6 +190,7 @@ export class SnapFormStore<
     };
   }
 
+  /** Read all current values, including any pending DOM input not yet synced to state. */
   getValues(): V {
     const stateValues = this.state.get("values");
     const merged = { ...stateValues };
@@ -180,6 +203,7 @@ export class SnapFormStore<
     return merged as V;
   }
 
+  /** Read a single field's current value, including any pending DOM input. */
   getValue(field: keyof V & string): V[typeof field] {
     if (this._radioRefs.has(field)) {
       return this.coerceRadioValue(field) as V[typeof field];
@@ -189,24 +213,28 @@ export class SnapFormStore<
     return this.state.get(`values.${field}` as any);
   }
 
+  /** Programmatically set a field's value. Also syncs the DOM element and triggers change validation. */
   setValue<F extends keyof V & string>(field: F, value: V[F]): void {
     this.state.set(`values.${field}` as any, value);
     this.syncValueToDom(field, value);
     this.handleChange(field);
   }
 
+  /** Trigger blur-time validation if `validationMode` is `"onBlur"`. */
   handleBlur(field: keyof V & string): void {
     if (this.formConfig.validationMode === "onBlur") {
       this.validateField(field);
     }
   }
 
+  /** Trigger change-time validation if `validationMode` is `"onChange"`. */
   handleChange(field: keyof V & string): void {
     if (this.formConfig.validationMode === "onChange") {
       this.validateField(field);
     }
   }
 
+  /** Check if a single field's value differs from its initial value. */
   isFieldDirty(field: keyof V & string): boolean {
     return !this.valuesEqual(
       this.state.get(`values.${field}` as any),
@@ -214,16 +242,19 @@ export class SnapFormStore<
     );
   }
 
+  /** Manually add an error message to a field (appended to existing errors). */
   setError(field: keyof V & string, message: string): void {
     const errors = this.state.get("errors");
     const existing = errors[field] ?? [];
     this.state.set(`errors.${field}` as any, [...existing, message] as any);
   }
 
+  /** Remove all validation errors. */
   clearErrors(): void {
     this.state.set("errors", {} as FormErrors<V>);
   }
 
+  /** Run the full Zod schema validation. Returns parsed values on success, or `null` on failure (errors are set). */
   validate(): V | null {
     this.syncFromRefs();
     const result = this.schema.safeParse(this.state.get("values"));
@@ -241,6 +272,7 @@ export class SnapFormStore<
     return null;
   }
 
+  /** Validate a single field against its schema. Updates or clears that field's errors. */
   validateField(field: keyof V & string): void {
     if (!this.objectSchema) return;
     const fieldSchema = this.objectSchema.shape[field];
@@ -259,6 +291,7 @@ export class SnapFormStore<
     }
   }
 
+  /** Reset all fields to their initial values and clear errors. */
   reset(): void {
     const initial = this.state.get("initial");
     this.state.batch(() => {
@@ -269,6 +302,7 @@ export class SnapFormStore<
     this.syncToDom();
   }
 
+  /** Clear all fields to empty/zero values (based on type) and clear errors. */
   clear(): void {
     const initial = this.state.get("initial");
     const shapeKeys = this.objectSchema ? Object.keys(this.objectSchema.shape) : [];
@@ -303,6 +337,7 @@ export class SnapFormStore<
     this.syncToDom();
   }
 
+  /** Update initial values and reset the form to them. Useful for populating from an API response. */
   setInitialValues(values: Partial<V>): void {
     const current = this.state.get("initial");
     const merged = { ...current, ...values } as V;
@@ -490,6 +525,11 @@ export class SnapFormStore<
     }
   }
 
+  /**
+   * Validate and submit the form. Returns `undefined` if validation fails.
+   * Status is tracked under `key` and reflected in `submitStatus`.
+   * @example await form.submit("save", values => api.post("/users", { body: values }))
+   */
   submit(
     key: K,
     handler: (values: V) => Promise<void>,
@@ -501,6 +541,7 @@ export class SnapFormStore<
     return promise;
   }
 
+  /** Keep `submitStatus` in sync with the api operation tracked under `key`. */
   protected syncSubmitStatus(key: K): void {
     const update = () => {
       const status = this.getStatus(key);

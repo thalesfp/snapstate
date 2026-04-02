@@ -24,6 +24,7 @@ function patchHistory(): void {
   }
 }
 
+/** Options for `createUrlParams()`. */
 export interface UrlParamsOptions<T extends Record<string, unknown> = Record<string, unknown>> {
   /** Provide initial params for SSR or testing (no window.location access). */
   initialParams?: T;
@@ -37,10 +38,9 @@ export interface UrlParamsOptions<T extends Record<string, unknown> = Record<str
   arrayFormat?: "brackets" | "indices" | "comma" | "repeat";
 }
 
+/** Reactive URL search-params reader. Subscribe to be notified when the URL changes. */
 export interface UrlParams<T extends Record<string, unknown> = Record<string, unknown>> extends Subscribable<T> {
-  /** Get current parsed params. */
   getSnapshot(): T;
-  /** Subscribe to param changes. */
   subscribe(callback: Listener): Unsubscribe;
   /** Re-read URL params (useful after programmatic navigation). */
   refresh(): void;
@@ -48,6 +48,7 @@ export interface UrlParams<T extends Record<string, unknown> = Record<string, un
   destroy(): void;
 }
 
+/** Parse a URL search string into a plain object using `qs`. */
 export function parseSearch(search: string, options: UrlParamsOptions = {}): Record<string, unknown> {
   return qs.parse(search, {
     ignoreQueryPrefix: true,
@@ -58,6 +59,12 @@ export function parseSearch(search: string, options: UrlParamsOptions = {}): Rec
   }) as Record<string, unknown>;
 }
 
+/**
+ * Create a reactive URL search-params reader that notifies subscribers on navigation.
+ * @example
+ * const params = createUrlParams<{ filter: string }>()
+ * params.subscribe(() => console.log(params.getSnapshot()))
+ */
 export function createUrlParams<T extends Record<string, unknown> = Record<string, unknown>>(
   options: UrlParamsOptions<T> = {},
 ): UrlParams<T> {
