@@ -4,7 +4,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, act as actTL, screen } from "@testing-library/react";
 import { createElement, Component, StrictMode } from "react";
-import { SnapStore, connect } from "../src/react/index.js";
+import { SnapStore, connect, scoped } from "../src/react/index.js";
 import type { AsyncStatus } from "../src/react/index.js";
 
 interface TestState {
@@ -747,5 +747,189 @@ describe("connect decorator", () => {
       await new Promise((r) => setTimeout(r, 0));
       expect(cleanupSpy).toHaveBeenCalledOnce();
     });
+  });
+});
+
+describe("scoped decorator", () => {
+  it("injects mapped state as props", () => {
+    @scoped({
+      factory: () => new TestStore(),
+      props: (s: TestStore) => ({ count: s.count }),
+    })
+    class Display extends Component<{ count: number }> {
+      render() {
+        return createElement("span", { "data-testid": "val" }, this.props.count);
+      }
+    }
+
+    render(createElement(Display));
+    expect(screen.getByTestId("val").textContent).toBe("0");
+  });
+
+  it("re-renders when scoped store state changes", async () => {
+    let storeInstance: TestStore | null = null;
+
+    @scoped({
+      factory: () => {
+        const s = new TestStore();
+        storeInstance = s;
+        return s;
+      },
+      props: (s: TestStore) => ({ count: s.count }),
+    })
+    class Display extends Component<{ count: number }> {
+      render() {
+        return createElement("span", { "data-testid": "val" }, this.props.count);
+      }
+    }
+
+    render(createElement(Display));
+    expect(screen.getByTestId("val").textContent).toBe("0");
+
+    await actTL(async () => {
+      storeInstance!.setCount(5);
+    });
+    expect(screen.getByTestId("val").textContent).toBe("5");
+  });
+
+  it("each mounted instance gets its own store", () => {
+    const instances: TestStore[] = [];
+
+    @scoped({
+      factory: () => {
+        const s = new TestStore();
+        instances.push(s);
+        return s;
+      },
+      props: (s: TestStore) => ({ count: s.count }),
+    })
+    class Display extends Component<{ count: number }> {
+      render() {
+        return createElement("span", { "data-testid": "val" }, this.props.count);
+      }
+    }
+
+    render(createElement("div", null,
+      createElement(Display),
+      createElement(Display),
+    ));
+
+    expect(instances).toHaveLength(2);
+    expect(instances[0]).not.toBe(instances[1]);
+  });
+
+  it("passes through own props", () => {
+    @scoped({
+      factory: () => new TestStore(),
+      props: (s: TestStore) => ({ count: s.count }),
+    })
+    class Display extends Component<{ count: number; label: string }> {
+      render() {
+        return createElement("span", { "data-testid": "val" }, `${this.props.label}:${this.props.count}`);
+      }
+    }
+
+    render(createElement(Display, { label: "items" }));
+    expect(screen.getByTestId("val").textContent).toBe("items:0");
+  });
+
+  it("renders loading component during fetch", async () => {
+    let resolveFetch!: () => void;
+    const fetchPromise = new Promise<void>((r) => { resolveFetch = r; });
+
+    function Loading() {
+      return createElement("span", { "data-testid": "loading" }, "Loading...");
+    }
+
+    @scoped({
+      factory: () => new TestStore(),
+      props: (s: TestStore) => ({ count: s.count }),
+      fetch: async () => { await fetchPromise; },
+      loading: Loading,
+    })
+    class Display extends Component<{ count: number }> {
+      render() {
+        return createElement("span", { "data-testid": "val" }, this.props.count);
+      }
+    }
+
+    render(createElement(Display));
+
+    expect(screen.getByTestId("loading").textContent).toBe("Loading...");
+
+    await actTL(async () => {
+      resolveFetch();
+    });
+
+    expect(screen.queryByTestId("loading")).toBeNull();
+    expect(screen.getByTestId("val").textContent).toBe("0");
+  });
+
+  it("renders error component on fetch failure", async () => {
+    function ErrorDisplay({ error }: { error: string }) {
+      return createElement("span", { "data-testid": "err" }, error);
+    }
+
+    @scoped({
+      factory: () => new TestStore(),
+      props: (s: TestStore) => ({ count: s.count }),
+      fetch: async () => { throw new Error("Boom"); },
+      error: ErrorDisplay,
+    })
+    class Display extends Component<{ count: number }> {
+      render() {
+        return createElement("span", { "data-testid": "val" }, this.props.count);
+      }
+    }
+
+    await actTL(async () => {
+      render(createElement(Display));
+    });
+
+    expect(screen.getByTestId("err").textContent).toBe("Boom");
+    expect(screen.queryByTestId("val")).toBeNull();
+  });
+
+  it("cleanup fires on unmount", async () => {
+    const cleanupSpy = vi.fn();
+
+    @scoped({
+      factory: () => new TestStore(),
+      props: (s: TestStore) => ({ count: s.count }),
+      cleanup: cleanupSpy,
+    })
+    class Display extends Component<{ count: number }> {
+      render() {
+        return createElement("span", null, this.props.count);
+      }
+    }
+
+    const { unmount } = render(createElement(Display));
+    expect(cleanupSpy).not.toHaveBeenCalled();
+    unmount();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(cleanupSpy).toHaveBeenCalled();
+  });
+
+  it("setup fires before fetch", async () => {
+    const order: string[] = [];
+
+    @scoped({
+      factory: () => new TestStore(),
+      props: (s: TestStore) => ({ count: s.count }),
+      setup: () => { order.push("setup"); },
+      fetch: async () => { order.push("fetch"); },
+    })
+    class Display extends Component<{ count: number }> {
+      render() {
+        return createElement("span", null, this.props.count);
+      }
+    }
+
+    render(createElement(Display));
+    await actTL(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(order).toEqual(["setup", "fetch"]);
   });
 });
