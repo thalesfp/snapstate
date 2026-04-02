@@ -9,60 +9,72 @@ import {
 } from "react";
 import { SnapStore } from "../core/base.js";
 import { asyncStatus } from "../core/types.js";
-import type { StoreOptions, AsyncStatus, DotPaths, GetByPath } from "../core/types.js";
+import type { StoreOptions, AsyncStatus, DotPaths, GetByPath, Subscribable } from "../core/types.js";
+import { shallowEqual } from "../core/shallow-equal.js";
+import type { UrlParams } from "../url/params.js";
+import { parseSearch } from "../url/params.js";
+
+function getUrlParams(): Record<string, unknown> {
+  if (typeof window === "undefined") return {};
+  return parseSearch(window.location.search);
+}
 
 type OwnProps = Record<string, unknown>;
 
-export interface ConnectConfig<S, MappedProps, Own = OwnProps> {
+export interface ConnectConfig<S, MappedProps, Own = OwnProps, Params extends Record<string, unknown> = Record<string, unknown>> {
   props: (store: S) => MappedProps;
-  setup?: (store: S, props: Own) => void;
-  fetch: (store: S, props: Own) => Promise<void>;
+  setup?: (store: S, props: Own, params: Params) => void;
+  fetch: (store: S, props: Own, params: Params) => Promise<void>;
+  urlParams?: UrlParams<Params>;
   cleanup?: (store: S, props: Own) => void;
-  deps?: (props: Own) => unknown[];
+  deps?: (props: Own, params: Params) => unknown[];
   loading?: React.ComponentType;
   error?: React.ComponentType<{ error: string }>;
   template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
-export interface ConnectPropsConfig<S, MappedProps, Own = OwnProps> {
+export interface ConnectPropsConfig<S, MappedProps, Own = OwnProps, Params extends Record<string, unknown> = Record<string, unknown>> {
   props: (store: S) => MappedProps;
-  setup?: (store: S, props: Own) => void;
+  setup?: (store: S, props: Own, params: Params) => void;
+  urlParams?: UrlParams<Params>;
   cleanup?: (store: S, props: Own) => void;
-  deps?: (props: Own) => unknown[];
+  deps?: (props: Own, params: Params) => unknown[];
   template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
 export type PickFn<T extends object> = <P extends DotPaths<T>>(path: P) => GetByPath<T, P>;
 
-export interface SelectConnectConfig<T extends object, S, MappedProps, Own = OwnProps> {
+export interface SelectConnectConfig<T extends object, S, MappedProps, Own = OwnProps, Params extends Record<string, unknown> = Record<string, unknown>> {
   select: (pick: PickFn<T>) => MappedProps;
-  fetch?: (store: S, props: Own) => Promise<void>;
-  setup?: (store: S, props: Own) => void;
+  fetch?: (store: S, props: Own, params: Params) => Promise<void>;
+  urlParams?: UrlParams<Params>;
+  setup?: (store: S, props: Own, params: Params) => void;
   cleanup?: (store: S, props: Own) => void;
-  deps?: (props: Own) => unknown[];
+  deps?: (props: Own, params: Params) => unknown[];
   loading?: React.ComponentType;
   error?: React.ComponentType<{ error: string }>;
   template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
-export interface SelectFetchConnectConfig<T extends object, S, MappedProps, Own = OwnProps> extends SelectConnectConfig<T, S, MappedProps, Own> {
-  fetch: (store: S, props: Own) => Promise<void>;
+export interface SelectFetchConnectConfig<T extends object, S, MappedProps, Own = OwnProps, Params extends Record<string, unknown> = Record<string, unknown>> extends SelectConnectConfig<T, S, MappedProps, Own, Params> {
+  fetch: (store: S, props: Own, params: Params) => Promise<void>;
 }
 
-export interface ScopedConfig<S, MappedProps, Own = OwnProps> {
+export interface ScopedConfig<S, MappedProps, Own = OwnProps, Params extends Record<string, unknown> = Record<string, unknown>> {
   factory: () => S;
   props: (store: S) => MappedProps;
-  fetch?: (store: S, ownProps: Own) => Promise<void>;
-  setup?: (store: S, ownProps: Own) => void;
+  fetch?: (store: S, ownProps: Own, params: Params) => Promise<void>;
+  urlParams?: UrlParams<Params>;
+  setup?: (store: S, ownProps: Own, params: Params) => void;
   cleanup?: (store: S, ownProps: Own) => void;
-  deps?: (ownProps: Own) => unknown[];
+  deps?: (ownProps: Own, params: Params) => unknown[];
   loading?: React.ComponentType;
   error?: React.ComponentType<{ error: string }>;
   template?: React.ComponentType<MappedProps & { children: React.ReactNode }>;
 }
 
-export interface ScopedFetchConfig<S, MappedProps, Own = OwnProps> extends ScopedConfig<S, MappedProps, Own> {
-  fetch: (store: S, ownProps: Own) => Promise<void>;
+export interface ScopedFetchConfig<S, MappedProps, Own = OwnProps, Params extends Record<string, unknown> = Record<string, unknown>> extends ScopedConfig<S, MappedProps, Own, Params> {
+  fetch: (store: S, ownProps: Own, params: Params) => Promise<void>;
 }
 
 interface FetchConfig<S> {
@@ -181,38 +193,75 @@ function useLifecycle<S>(
   }, deps ?? []);
 }
 
-function shallowEqual(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
-  const keysA = Object.keys(a);
-  const keysB = Object.keys(b);
-  if (keysA.length !== keysB.length) { return false; }
-  for (const key of keysA) {
-    if (a[key] !== b[key]) { return false; }
-  }
-  return true;
-}
-
 interface LifecycleConfig<S> {
-  fetchFn?: (store: S, props: OwnProps) => Promise<void>;
-  setupFn?: (store: S, props: OwnProps) => void;
+  fetchFn?: (store: S, props: OwnProps, params: Record<string, unknown>) => Promise<void>;
+  getParams: () => Record<string, unknown>;
+  urlParamsSource?: Subscribable<Record<string, unknown>>;
+  setupFn?: (store: S, props: OwnProps, params: Record<string, unknown>) => void;
   cleanupFn?: (store: S, props: OwnProps) => void;
-  depsFn?: (props: OwnProps) => unknown[];
+  depsFn?: (props: OwnProps, params: Record<string, unknown>) => unknown[];
   loadingComponent?: React.ComponentType;
   errorComponent?: React.ComponentType<{ error: string }>;
 }
 
+// Public config interfaces use narrower Own/Params types for callbacks,
+// but LifecycleConfig erases them to OwnProps/Record<string,unknown>.
+// Call sites cast to ConnectLifecycleInput to bridge the variance gap.
+// This is safe because bindLifecycle passes the actual ownProps unchanged.
+interface ConnectLifecycleInput<S> {
+  fetch?: LifecycleConfig<S>["fetchFn"];
+  urlParams?: UrlParams<Record<string, unknown>>;
+  setup?: LifecycleConfig<S>["setupFn"];
+  cleanup?: LifecycleConfig<S>["cleanupFn"];
+  deps?: LifecycleConfig<S>["depsFn"];
+  loading?: React.ComponentType;
+  error?: React.ComponentType<{ error: string }>;
+}
+
+function buildLifecycleConfig<S>(config: ConnectLifecycleInput<S>): LifecycleConfig<S> {
+  const up = config.urlParams;
+  return {
+    fetchFn: config.fetch,
+    getParams: up ? () => up.getSnapshot() : getUrlParams,
+    urlParamsSource: up,
+    setupFn: config.setup,
+    cleanupFn: config.cleanup,
+    depsFn: config.deps,
+    loadingComponent: config.loading,
+    errorComponent: config.error,
+  };
+}
+
+const emptyParams: Record<string, unknown> = {};
+const noopSubscribe = () => () => {};
+const noopGetSnapshot = () => emptyParams;
+
+function useUrlParams(source: Subscribable<Record<string, unknown>> | undefined): void {
+  const subscribe = useCallback(
+    (cb: () => void) => source ? source.subscribe(cb) : noopSubscribe(),
+    [source],
+  );
+  const snapshot = useCallback(
+    () => source ? source.getSnapshot() : emptyParams,
+    [source],
+  );
+  useSyncExternalStore(subscribe, snapshot, noopGetSnapshot);
+}
+
 function bindLifecycle<S>(ownProps: Record<string, unknown>, config: LifecycleConfig<S>) {
   const own = ownProps as OwnProps;
-  const deps = config.depsFn ? config.depsFn(own) : undefined;
+  const params = config.getParams();
+  const deps = config.depsFn ? config.depsFn(own, params) : undefined;
 
   const wrapFetch = config.fetchFn;
   const wrapSetup = config.setupFn;
   const wrapCleanup = config.cleanupFn;
 
   const fetchFn = wrapFetch
-    ? (s: S) => { return wrapFetch(s, own); }
+    ? (s: S) => { return wrapFetch(s, own, params); }
     : undefined;
   const setupFn = wrapSetup
-    ? (s: S) => { wrapSetup(s, own); }
+    ? (s: S) => { wrapSetup(s, own, params); }
     : undefined;
   const cleanupFn = wrapCleanup
     ? (s: S) => { wrapCleanup(s, own); }
@@ -271,19 +320,15 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       ? null
       : configOrMapper as ConnectConfig<this, MappedProps>;
     const mapToProps = config ? config.props : configOrMapper as (store: this) => MappedProps;
-    const lcConfig = {
-      fetchFn: config?.fetch,
-      setupFn: config?.setup,
-      cleanupFn: config?.cleanup,
-      depsFn: config?.deps,
-      loadingComponent: config?.loading,
-      errorComponent: config?.error,
-    } as LifecycleConfig<typeof store>;
+    const lcConfig = config
+      ? buildLifecycleConfig(config as ConnectLifecycleInput<typeof store>)
+      : { getParams: getUrlParams } as LifecycleConfig<typeof store>;
 
     const Connected = forwardRef<unknown, Omit<P, keyof MappedProps>>(function Connected(ownProps, ref) {
       const cachedRef = useRef<{ revision: number; props: MappedProps } | null>(null);
       const revisionRef = useRef(0);
 
+      useUrlParams(lcConfig.urlParamsSource);
       const { deps, fetchFn, setupFn, cleanupFn } = bindLifecycle(ownProps as OwnProps, lcConfig);
 
       const subscribe = useCallback(
@@ -342,14 +387,7 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
   ): React.FC<Omit<P, keyof MappedProps>> {
     const store = this;
     const selectFn = config.select;
-    const lcConfig = {
-      fetchFn: config.fetch,
-      setupFn: config.setup,
-      cleanupFn: config.cleanup,
-      depsFn: config.deps,
-      loadingComponent: config.loading,
-      errorComponent: config.error,
-    } as LifecycleConfig<typeof store>;
+    const lcConfig = buildLifecycleConfig(config as ConnectLifecycleInput<typeof store>);
 
     const resolvePathValue = (path: string): any => {
       const segments = path.split(".");
@@ -377,6 +415,7 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       const cachedRef = useRef<{ revision: number; props: MappedProps } | null>(null);
       const revisionRef = useRef(0);
 
+      useUrlParams(lcConfig.urlParamsSource);
       const { deps, fetchFn, setupFn, cleanupFn } = bindLifecycle(ownProps as OwnProps, lcConfig);
 
       const subscribe = useCallback(
@@ -459,17 +498,11 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
     Component: React.ComponentType<P>,
     config: ScopedConfig<S, MappedProps>,
   ): React.FC<Omit<P, keyof MappedProps>> {
-    const lcConfig = {
-      fetchFn: config.fetch,
-      setupFn: config.setup,
-      cleanupFn: config.cleanup,
-      depsFn: config.deps,
-      loadingComponent: config.loading,
-      errorComponent: config.error,
-    } as LifecycleConfig<S>;
+    const lcConfig = buildLifecycleConfig(config as ConnectLifecycleInput<S>);
 
     const Scoped = forwardRef<unknown, Omit<P, keyof MappedProps>>(function Scoped(ownProps, ref) {
       const [store, setStore] = useState<S | null>(null);
+      useUrlParams(lcConfig.urlParamsSource);
 
       // Create store in effect so StrictMode properly pairs creation with cleanup.
       // Render-time creation (useRef lazy init) leaks stores whose constructor has
@@ -485,15 +518,16 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       const revisionRef = useRef(0);
 
       const own = ownProps as OwnProps;
-      const baseDeps = lcConfig.depsFn ? lcConfig.depsFn(own) : undefined;
+      const params = lcConfig.getParams();
+      const baseDeps = lcConfig.depsFn ? lcConfig.depsFn(own, params) : undefined;
       // Include store in deps so lifecycle hooks re-fire when store becomes available
       const deps = baseDeps !== undefined ? [...baseDeps, store] : [store];
 
       const fetchFn = store && lcConfig.fetchFn
-        ? (s: S) => lcConfig.fetchFn!(s, own)
+        ? (s: S) => lcConfig.fetchFn!(s, own, params)
         : undefined;
       const setupFn = store && lcConfig.setupFn
-        ? (s: S) => lcConfig.setupFn!(s, own)
+        ? (s: S) => lcConfig.setupFn!(s, own, params)
         : undefined;
       const cleanupFn = store && lcConfig.cleanupFn
         ? (s: S) => lcConfig.cleanupFn!(s, own)

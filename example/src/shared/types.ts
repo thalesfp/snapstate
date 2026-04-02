@@ -4,7 +4,8 @@ export interface Todo {
   completed: boolean;
 }
 
-export type Filter = "all" | "active" | "completed";
+export const FILTER_VALUES = ["all", "active", "completed"] as const;
+export type Filter = (typeof FILTER_VALUES)[number];
 
 export interface User {
   id: string;

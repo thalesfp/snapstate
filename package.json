@@ -21,6 +21,11 @@
       "types": "./dist/form/index.d.ts",
       "import": "./dist/form/index.js",
       "require": "./dist/form/index.cjs"
+    },
+    "./url": {
+      "types": "./dist/url/index.d.ts",
+      "import": "./dist/url/index.js",
+      "require": "./dist/url/index.cjs"
     }
   },
   "files": [
@@ -52,6 +57,7 @@
   },
   "devDependencies": {
     "@testing-library/react": "^16.0.0",
+    "@types/qs": "^6.15.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "jsdom": "^25.0.0",
@@ -81,5 +87,8 @@
     "zod",
     "subscriptions",
     "path-based"
-  ]
+  ],
+  "dependencies": {
+    "qs": "^6.15.0"
+  }
 }

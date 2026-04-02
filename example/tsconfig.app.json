@@ -10,7 +10,8 @@
     "paths": {
       "snapstate": ["../dist/index.d.ts"],
       "snapstate/react": ["../dist/react/index.d.ts"],
-      "snapstate/form": ["../dist/form/index.d.ts"]
+      "snapstate/form": ["../dist/form/index.d.ts"],
+      "snapstate/url": ["../dist/url/index.d.ts"]
     },
 
     /* Bundler mode */

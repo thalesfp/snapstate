@@ -211,7 +211,7 @@ const ProjectDetail = projectStore.connect(ProjectView, {
 });
 ```
 
-`deps` returns a dependency array from the component's own props. When values change, `cleanup` runs for the previous deps, then `fetch` and `setup` re-run. Without `deps`, lifecycle callbacks run once on mount.
+`deps` returns a dependency array from the component's own props (and optionally URL params — see [URL Parameters](#url-parameters)). When values change, `cleanup` runs for the previous deps, then `fetch` and `setup` re-run. Without `deps`, lifecycle callbacks run once on mount.
 
 ### Template
 
@@ -470,6 +470,96 @@ export const LoginForm = loginStore.connect(LoginFormView, (s) => ({
 
 Supported elements: text inputs, number, checkbox, textarea, select, range, radio, date/time/datetime-local, select multiple, and file inputs.
 
+## URL Parameters
+
+`@thalesfp/snapstate/url` provides reactive URL search parameter reading and writing. Requires the `qs` peer dependency.
+
+### Reading URL params
+
+`createUrlParams<T>()` returns a typed `Subscribable` that parses `window.location.search`. It automatically detects navigation via `popstate`, `pushState`, and `replaceState`.
+
+```ts
+import { createUrlParams } from "@thalesfp/snapstate/url";
+
+const urlParams = createUrlParams<{ filter?: string; page?: string }>();
+
+urlParams.getSnapshot(); // { filter: "active", page: "2" } from ?filter=active&page=2
+```
+
+Use it with `derive()` to sync URL params into store state:
+
+```ts
+class AppStore extends SnapStore<{ filter: string }> {
+  constructor() {
+    super({ filter: "all" });
+    this.derive("filter", urlParams, (p) => (p.filter as string) ?? "all");
+  }
+}
+```
+
+Or pass it to `connect()` so `fetch`, `setup`, and `deps` receive typed params automatically:
+
+```tsx
+const TodoApp = todoStore.connect(TodoAppView, {
+  props: (s) => ({ todos: s.filteredTodos }),
+  urlParams,
+  fetch: (store, props, params) => {
+    // params.filter is typed as string | undefined
+    if (params.filter) store.setFilter(params.filter);
+    return store.loadTodos();
+  },
+  deps: (props, params) => [params.filter],
+  loading: () => <Spinner />,
+});
+```
+
+### Writing state to URL
+
+`syncToUrl()` subscribes to a store and mirrors selected state into URL search params:
+
+```ts
+import { syncToUrl } from "@thalesfp/snapstate/url";
+
+const unsub = syncToUrl(todoStore, {
+  params: {
+    filter: (s) => s.filter,
+    page: (s) => s.page,
+  },
+  history: "replace", // default; use "push" for back-button navigation
+});
+```
+
+Empty, null, and undefined values are omitted from the URL. The subscriber skips `qs.stringify` entirely when the tracked params haven't changed.
+
+### Parsing features
+
+Powered by `qs`, supports nested objects, arrays, dot notation, and depth/parameter limits:
+
+```
+?user[name]=John          → { user: { name: "John" } }
+?colors[]=red&colors[]=blue → { colors: ["red", "blue"] }
+?user.name=John           → { user: { name: "John" } }
+```
+
+### Options
+
+```ts
+createUrlParams({
+  initialParams: { filter: "all" },  // SSR/testing (bypass window)
+  listen: true,                       // Listen to navigation events (default: true in browser)
+  depth: 5,                           // Max nesting depth (default: 5)
+  parameterLimit: 1000,               // Max params to parse (default: 1000)
+  arrayFormat: "brackets",            // "brackets" | "indices" | "comma" | "repeat"
+});
+```
+
+### Cleanup
+
+```ts
+urlParams.destroy();  // Remove event listeners
+unsub();              // Stop syncing to URL (return value of syncToUrl)
+```
+
 ## Configuration
 
 ### Entry points
@@ -479,8 +569,9 @@ Supported elements: text inputs, number, checkbox, textarea, select, range, radi
 | `@thalesfp/snapstate` | Core `SnapStore`, types, `setHttpClient` |
 | `@thalesfp/snapstate/react` | `ReactSnapStore` with `connect()` HOC |
 | `@thalesfp/snapstate/form` | `SnapFormStore` with Zod validation and form lifecycle |
+| `@thalesfp/snapstate/url` | `createUrlParams`, `syncToUrl` for URL search params |
 
-React and Zod are optional peer dependencies -- only needed if you use their respective entry points.
+React, Zod, and qs are optional peer dependencies -- only needed if you use their respective entry points.
 
 ### Custom HTTP client
 
