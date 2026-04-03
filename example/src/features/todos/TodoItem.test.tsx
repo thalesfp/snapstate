@@ -3,13 +3,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 
-vi.mock("snapstate/react", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("snapstate/react")>();
-  return { ...actual, connect: () => (target: any) => target };
-});
-
 vi.mock("../../stores", () => ({
   todoStore: {
+    connect: (c: any) => c,
     toggleTodo: vi.fn().mockResolvedValue(undefined),
     editTodo: vi.fn().mockResolvedValue(undefined),
     removeTodo: vi.fn().mockResolvedValue(undefined),

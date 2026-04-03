@@ -8,6 +8,5 @@ export const TodoDetailPage = () => {
     return <p>Todo not found</p>;
   }
 
-  // @ts-expect-error todo injected by @scoped decorator
   return <TodoDetail id={id} />;
 };
