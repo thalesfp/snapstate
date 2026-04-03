@@ -8,6 +8,7 @@ const snapstate = path.resolve(__dirname, '..')
 export default defineConfig({
   resolve: {
     alias: {
+      '@thalesfp/snapstate': path.join(snapstate, 'dist/index.js'),
       'snapstate/react': path.join(snapstate, 'dist/react/index.js'),
       'snapstate/form': path.join(snapstate, 'dist/form/index.js'),
       'snapstate/url': path.join(snapstate, 'dist/url/index.js'),
