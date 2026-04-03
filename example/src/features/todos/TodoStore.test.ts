@@ -118,7 +118,7 @@ describe("TodoStore", () => {
     it("filters completed todos", () => {
       store.setFilter("completed");
       expect(store.filteredTodos).toEqual([
-        { id: "2", text: "Completed task", completed: true },
+        expect.objectContaining({ id: "2", text: "Completed task", completed: true }),
       ]);
     });
 

@@ -62,15 +62,23 @@ export class SnapStore<T extends object, K extends string = string> {
   private _generations = new Map<K, number>();
   private _derivedUnsubs: Unsubscribe[] = [];
 
+  private _httpClient: HttpClient | null;
+
+  protected get http(): HttpClient {
+    return this._httpClient ?? httpClient;
+  }
+
   protected readonly state: StateAccessor<T>;
   protected readonly api: ApiAccessor<K>;
 
   constructor(initialState: T, options?: StoreOptions) {
     this._store = createStore(initialState, options);
+    this._httpClient = options?.httpClient ?? null;
 
     const store = this._store;
     const operations = this._operations;
     const generations = this._generations;
+    const resolveClient = (): HttpClient => this.http;
 
     // takeLatest semantic: if a newer call starts for the same key, the older
     // call's promise resolves silently (no reject, no state update).
@@ -98,7 +106,7 @@ export class SnapStore<T extends object, K extends string = string> {
     const doSend = async <R>(key: K, method: string, url: string, options?: ApiRequestOptions<R>): Promise<void> => {
       await doFetch(key, async () => {
         try {
-          const data = await httpClient.request<R>(url, {
+          const data = await resolveClient().request<R>(url, {
             method,
             body: options?.body,
             headers: options?.headers,
@@ -168,11 +176,11 @@ export class SnapStore<T extends object, K extends string = string> {
       at: (path, index) => {
         return (store.get(path as any) as any[]).at(index);
       },
-      filter: (path, predicate) => {
-        return (store.get(path as any) as any[]).filter(predicate);
+      filter: (path: string, predicate: (item: never) => boolean) => {
+        return (store.get(path as any) as never[]).filter(predicate);
       },
-      find: (path, predicate) => {
-        return (store.get(path as any) as any[]).find(predicate);
+      find: (path: string, predicate: (item: never) => boolean) => {
+        return (store.get(path as any) as never[]).find(predicate);
       },
       findIndexOf: (path, predicate) => {
         return (store.get(path as any) as any[]).findIndex(predicate);
@@ -187,7 +195,7 @@ export class SnapStore<T extends object, K extends string = string> {
       fetch: doFetch,
       get: async <R>(key: K, url: string, onSuccess?: (data: R) => void): Promise<void> => {
         await doFetch(key, async () => {
-          const data = await httpClient.request<R>(url);
+          const data = await resolveClient().request<R>(url);
           onSuccess?.(data);
         });
       },

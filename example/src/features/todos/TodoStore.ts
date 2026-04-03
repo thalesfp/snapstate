@@ -1,6 +1,6 @@
 import { SnapStore } from "snapstate/react";
 import type { Subscribable } from "snapstate";
-import type { Todo, Filter, User } from "../../shared/types";
+import type { Todo, CompletedTodo, Filter, User } from "../../shared/types";
 
 type TodoOp = "fetch" | "add" | "toggle" | "remove" | "edit" | "clearCompleted";
 
@@ -29,16 +29,19 @@ export class TodoStore extends SnapStore<TodoState, TodoOp> {
     return this.state.get().filter;
   }
 
-  /** Todos matching the current {@link filter}. */
   get filteredTodos(): Todo[] {
     switch (this.state.get().filter) {
       case "active":
         return this.state.filter("todos", (t) => !t.completed);
       case "completed":
-        return this.state.filter("todos", (t) => t.completed);
+        return this.completedTodos;
       default:
         return this.state.get("todos");
     }
+  }
+
+  get completedTodos(): CompletedTodo[] {
+    return this.state.filter("todos", (t): t is CompletedTodo => t.completed);
   }
 
   /** Number of incomplete todos. */
@@ -66,7 +69,6 @@ export class TodoStore extends SnapStore<TodoState, TodoOp> {
     });
   }
 
-  /** Toggle a todo's completed state. Optimistic with rollback. */
   toggleTodo(id: string) {
     const todo = this.state.find("todos", (t) => t.id === id);
     if (!todo) {
@@ -74,13 +76,19 @@ export class TodoStore extends SnapStore<TodoState, TodoOp> {
     }
 
     const newCompleted = !todo.completed;
+    const optimisticUpdate = newCompleted
+      ? { completed: true, completedAt: new Date().toISOString() }
+      : { completed: false, completedAt: undefined };
 
-    this.state.patch("todos", (t) => t.id === id, { completed: newCompleted });
+    this.state.patch("todos", (t) => t.id === id, optimisticUpdate);
 
     return this.api.patch("toggle", `/api/todos/${id}`, {
       body: { completed: newCompleted },
       onError: () => {
-        this.state.patch("todos", (t) => t.id === id, { completed: !newCompleted });
+        const rollback = todo.completed
+          ? { completed: true, completedAt: todo.completedAt }
+          : { completed: false, completedAt: undefined };
+        this.state.patch("todos", (t) => t.id === id, rollback);
       },
     });
   }
