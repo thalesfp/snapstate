@@ -137,6 +137,11 @@ export interface StateAccessor<T extends object> {
    */
   batch(fn: () => void): void;
   /**
+   * Set multiple top-level keys in a single batched notification.
+   * @example this.state.merge({ firstName: "John", lastName: "Doe" })
+   */
+  merge(updates: Partial<T>): void;
+  /**
    * Create a lazy derived value that recomputes only when its dependency paths change.
    * @example
    * const fullName = this.state.computed(["firstName", "lastName"],

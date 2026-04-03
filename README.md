@@ -79,6 +79,7 @@ Stores hold state, expose methods, and notify subscribers. State changes use dot
 | `get(path)` | Value at a dot-path |
 | `set(path, value)` | Set a value or pass an updater `(prev) => next` |
 | `batch(fn)` | Group multiple sets into a single notification |
+| `merge(updates)` | Set multiple top-level keys in a single batch |
 | `computed(deps, fn)` | Lazily-recomputed derived value from dependency paths |
 | `reset()` | Restore all state to initial values |
 | `reset(...paths)` | Restore only the specified paths to initial values |
@@ -144,10 +145,7 @@ async fetchDashboard() {
       this.http.request<Stats>("/api/stats"),
     ]);
 
-    this.state.batch(() => {
-      this.state.set("todos", todos);
-      this.state.set("stats", stats);
-    });
+    this.state.merge({ todos, stats });
   });
 }
 ```

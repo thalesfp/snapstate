@@ -133,6 +133,13 @@ export class SnapStore<T extends object, K extends string = string> {
 
       set: (path, value) => store.set(path, value),
       batch: (fn) => store.batch(fn),
+      merge: (updates) => {
+        store.batch(() => {
+          for (const key of Object.keys(updates)) {
+            store.set(key as never, (updates as Record<string, unknown>)[key] as never);
+          }
+        });
+      },
       computed: (deps, fn) => store.computed(deps, fn),
 
       append: (path, ...items) => {

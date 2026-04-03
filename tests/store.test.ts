@@ -410,3 +410,44 @@ describe("SnapStore async race condition", () => {
     expect(store.getStatus("op").status.isReady).toBe(true);
   });
 });
+
+describe("state.merge", () => {
+  class MergeStore extends SnapStore<{ a: number; b: string; c: boolean }, never> {
+    constructor() {
+      super({ a: 0, b: "", c: false });
+    }
+
+    doMerge(updates: Partial<{ a: number; b: string; c: boolean }>) {
+      this.state.merge(updates);
+    }
+
+    snapshot() {
+      return this.getSnapshot();
+    }
+  }
+
+  it("sets multiple keys at once", () => {
+    const store = new MergeStore();
+    store.doMerge({ a: 1, b: "hello" });
+
+    expect(store.snapshot()).toEqual({ a: 1, b: "hello", c: false });
+  });
+
+  it("batches notifications into a single flush", () => {
+    const store = new MergeStore();
+    const listener = vi.fn();
+    store.subscribe("a", listener);
+
+    store.doMerge({ a: 1, b: "hello", c: true });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not affect keys not in the update", () => {
+    const store = new MergeStore();
+    store.doMerge({ a: 42 });
+
+    expect(store.snapshot().b).toBe("");
+    expect(store.snapshot().c).toBe(false);
+  });
+});
