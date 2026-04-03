@@ -19,8 +19,10 @@ export class TodoStore extends SnapStore<TodoState, TodoOp> {
   }
 
   fetchTodos() {
-    return this.api.get<Todo[]>("fetch", "/api/todos", (todos) => {
-      this.setTodos(todos);
+    return this.api.get<Todo[]>({
+      key: "fetch",
+      url: "/api/todos",
+      onSuccess: (todos) => this.setTodos(todos),
     });
   }
 
@@ -60,7 +62,9 @@ export class TodoStore extends SnapStore<TodoState, TodoOp> {
 
     if (!trimmed) return;
 
-    return this.api.post<Todo>("add", "/api/todos", {
+    return this.api.post<Todo>({
+      key: "add",
+      url: "/api/todos",
       body: { text: trimmed },
       onSuccess: (todo) => {
         this.state.append("todos", todo);
@@ -71,6 +75,7 @@ export class TodoStore extends SnapStore<TodoState, TodoOp> {
 
   toggleTodo(id: string) {
     const todo = this.state.find("todos", (t) => t.id === id);
+
     if (!todo) {
       return;
     }
@@ -82,7 +87,9 @@ export class TodoStore extends SnapStore<TodoState, TodoOp> {
 
     this.state.patch("todos", (t) => t.id === id, optimisticUpdate);
 
-    return this.api.patch("toggle", `/api/todos/${id}`, {
+    return this.api.patch({
+      key: "toggle",
+      url: `/api/todos/${id}`,
       body: { completed: newCompleted },
       onError: () => {
         const rollback = todo.completed
@@ -96,22 +103,30 @@ export class TodoStore extends SnapStore<TodoState, TodoOp> {
   /** Delete a todo. Optimistic with rollback to original position. */
   removeTodo(id: string) {
     const idx = this.state.findIndexOf("todos", (t) => t.id === id);
-    if (idx === -1) return;
+
+    if (idx === -1) {
+      return;
+    }
 
     const removed = this.state.at("todos", idx);
-    if (!removed) return;
+
+    if (!removed) {
+      return;
+    }
+
     this.state.removeAt("todos", idx);
 
-    return this.api.delete("remove", `/api/todos/${id}`, {
-      onError: () => {
-        this.state.insertAt("todos", idx, removed);
-      },
+    return this.api.delete({
+      key: "remove",
+      url: `/api/todos/${id}`,
+      onError: () => this.state.insertAt("todos", idx, removed),
     });
   }
 
   /** Rename a todo. Optimistic with rollback. No-ops if text is blank. */
   editTodo(id: string, text: string) {
     const trimmed = text.trim();
+
     if (!trimmed) {
       return;
     }
@@ -120,11 +135,11 @@ export class TodoStore extends SnapStore<TodoState, TodoOp> {
 
     this.state.patch("todos", (t) => t.id === id, { text: trimmed });
 
-    return this.api.patch("edit", `/api/todos/${id}`, {
+    return this.api.patch({
+      key: "edit",
+      url: `/api/todos/${id}`,
       body: { text: trimmed },
-      onError: () => {
-        this.state.patch("todos", (t) => t.id === id, { text: oldText ?? trimmed });
-      },
+      onError: () => this.state.patch("todos", (t) => t.id === id, { text: oldText ?? trimmed }),
     });
   }
 
@@ -144,10 +159,10 @@ export class TodoStore extends SnapStore<TodoState, TodoOp> {
     const removed = this.state.filter("todos", (t) => t.completed);
     this.state.remove("todos", (t) => t.completed);
 
-    return this.api.post("clearCompleted", "/api/todos/clear-completed", {
-      onError: () => {
-        this.state.append("todos", ...removed);
-      },
+    return this.api.post({
+      key: "clearCompleted",
+      url: "/api/todos/clear-completed",
+      onError: () => this.state.append("todos", ...removed),
     });
   }
 }

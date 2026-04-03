@@ -6,19 +6,19 @@ const mockFetch = vi.fn();
 
 class TestStore extends SnapStore<{ data: string }, "op"> {
   doGet(url: string) {
-    return this.api.get<string>("op", url, (d) => this.state.set("data", d));
+    return this.api.get<string>({ key: "op", url, onSuccess: (d) => this.state.set("data", d) });
   }
   doPost(url: string, body: unknown, headers?: Record<string, string>) {
-    return this.api.post("op", url, { body, headers });
+    return this.api.post({ key: "op", url, body, headers });
   }
 }
 
 class HttpClientStore extends TestStore {
   doFetchWithHttp(url: string) {
-    return this.api.fetch("op", async () => {
+    return this.api.fetch({ key: "op", fn: async () => {
       const data = await this.http.request<string>(url);
       this.state.set("data", data);
-    });
+    }});
   }
 }
 
@@ -138,7 +138,7 @@ describe("per-store httpClient", () => {
     const store = new HttpClientStore({ data: "" }, { httpClient: mockClient });
     await store.doGet("/api");
 
-    expect(mockClient.request).toHaveBeenCalledWith("/api");
+    expect(mockClient.request).toHaveBeenCalledWith("/api", expect.objectContaining({ method: "GET" }));
     expect(store.getSnapshot().data).toBe("custom");
   });
 
@@ -181,41 +181,18 @@ describe("per-store httpClient", () => {
     setHttpClient(laterClient);
     await store.doGet("/api");
 
-    expect(laterClient.request).toHaveBeenCalledWith("/api");
+    expect(laterClient.request).toHaveBeenCalledWith("/api", expect.objectContaining({ method: "GET" }));
     expect(store.getSnapshot().data).toBe("later");
   });
 });
 
-describe("path shorthand", () => {
+describe("named params", () => {
   interface TargetState {
     name: string;
     items: string[];
   }
 
   class TargetStore extends SnapStore<TargetState, "op"> {
-    getWithPath(url: string) {
-      return this.api.get("op", url, "name");
-    }
-
-    getWithCallback(url: string) {
-      return this.api.get<string>("op", url, (d) => {
-        this.state.set("name", d);
-      });
-    }
-
-    postWithTarget(url: string, body: unknown) {
-      return this.api.post("op", url, { body, target: "items" });
-    }
-
-    postWithCallback(url: string, body: unknown) {
-      return this.api.post<string[]>("op", url, {
-        body,
-        onSuccess: (d) => {
-          this.state.set("items", d);
-        },
-      });
-    }
-
     snapshot() {
       return this.getSnapshot();
     }
@@ -229,33 +206,55 @@ describe("path shorthand", () => {
     store = new TargetStore({ name: "", items: [] }, { httpClient: mockClient });
   });
 
-  it("api.get sets state at the given path", async () => {
-    await store.getWithPath("/api/name");
+  it("api.get with target sets state at the given path", async () => {
+    await store.api.get({ key: "op", url: "/api/name", target: "name" });
 
     expect(store.snapshot().name).toBe("hello");
   });
 
-  it("api.get still works with a callback", async () => {
-    await store.getWithCallback("/api/name");
+  it("api.get with callback works", async () => {
+    await store.api.get<string>({ key: "op", url: "/api/name", onSuccess: (d) => {
+      store.state.set("name" as never, d as never);
+    }});
 
     expect(store.snapshot().name).toBe("hello");
   });
 
-  it("api.post with target sets state at the given path", async () => {
+  it("api.post with target sets state", async () => {
     (mockClient.request as ReturnType<typeof vi.fn>).mockResolvedValue(["a", "b"]);
-    await store.postWithTarget("/api/items", { x: 1 });
+    await store.api.post({ key: "op", url: "/api/items", body: { x: 1 }, target: "items" });
 
     expect(store.snapshot().items).toEqual(["a", "b"]);
   });
 
-  it("api.post with onSuccess callback still works", async () => {
+  it("api.post with onSuccess callback works", async () => {
     (mockClient.request as ReturnType<typeof vi.fn>).mockResolvedValue(["c"]);
-    await store.postWithCallback("/api/items", { x: 1 });
+    await store.api.post<string[]>({ key: "op", url: "/api/items", body: { x: 1 }, onSuccess: (d) => {
+      store.state.set("items" as never, d as never);
+    }});
 
     expect(store.snapshot().items).toEqual(["c"]);
   });
 
-  it("api.get with no third arg does not throw", async () => {
-    await store.api.get("op" as never, "/api/void");
+  it("api.get without key skips status tracking", async () => {
+    await store.api.get({ url: "/api/name", target: "name" });
+
+    expect(store.snapshot().name).toBe("hello");
+    expect(store.getStatus("op").status.isIdle).toBe(true);
+  });
+
+  it("api.fetch without key skips status tracking", async () => {
+    await store.api.fetch({ fn: async () => {
+      store.state.set("name" as never, "manual" as never);
+    }});
+
+    expect(store.snapshot().name).toBe("manual");
+    expect(store.getStatus("op").status.isIdle).toBe(true);
+  });
+
+  it("api.get with key tracks status", async () => {
+    await store.api.get({ key: "op", url: "/api/name", target: "name" });
+
+    expect(store.getStatus("op").status.isReady).toBe(true);
   });
 });

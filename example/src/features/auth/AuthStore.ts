@@ -28,12 +28,13 @@ export class AuthStore extends SnapStore<AuthState, AuthOp> {
   }
 
   login(email: string, password: string) {
-    return this.api.post<{ token: string; user: User }>("login", "/api/auth/login", {
+    return this.api.post<{ token: string; user: User }>({
+      key: "login",
+      url: "/api/auth/login",
       body: { email, password },
       onSuccess: (data) => {
         localStorage.setItem(TOKEN_KEY, data.token);
-        this.state.set("token", data.token);
-        this.state.set("user", data.user);
+        this.state.merge({ token: data.token, user: data.user });
       },
     });
   }
@@ -53,7 +54,7 @@ export class AuthStore extends SnapStore<AuthState, AuthOp> {
     this.state.set("token", token);
 
     try {
-      await this.api.get("restore", "/api/auth/me", "user");
+      await this.api.get({ key: "restore", url: "/api/auth/me", target: "user" });
     } catch {
       this.logout();
     }

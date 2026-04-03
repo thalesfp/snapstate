@@ -13,7 +13,7 @@ class TestStore extends SnapStore<TestState, "load"> {
   }
 
   async doFetch(key: "load", fn: () => Promise<void>) {
-    return this.api.fetch(key, fn);
+    return this.api.fetch({ key, fn });
   }
 
   doAppend<P extends "nums" | "items">(path: P, ...items: any[]) {

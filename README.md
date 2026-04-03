@@ -27,7 +27,7 @@ class TodoStore extends ReactSnapStore<State, "load"> {
   }
 
   loadTodos() {
-    return this.api.get("load", "/api/todos", "todos");
+    return this.api.get({ key: "load", url: "/api/todos", target: "todos" });
   }
 
   addTodo(text: string) {
@@ -109,19 +109,18 @@ const completed = this.state.filter("todos", (t): t is CompletedTodo => t.comple
 
 ### Async operations (`this.api.*`)
 
-Every operation is keyed. Concurrent calls to the same key use take-latest semantics -- stale responses are silently discarded.
+All methods take a single params object. When `key` is provided, the operation is tracked via `getStatus(key)` with take-latest semantics. When `key` is omitted, the request runs without status tracking.
 
 | Method | Description |
 |---|---|
-| `fetch(key, fn)` | Run async function with tracked status |
-| `get(key, url, path)` | GET and store result at state path |
-| `get(key, url, onSuccess?)` | GET with callback |
-| `post(key, url, options?)` | POST request |
-| `put(key, url, options?)` | PUT request |
-| `patch(key, url, options?)` | PATCH request |
-| `delete(key, url, options?)` | DELETE request |
+| `fetch({ key?, fn })` | Run async function, optionally tracked |
+| `get({ key?, url, target })` | GET and store result at state path |
+| `get({ key?, url, onSuccess? })` | GET with callback |
+| `post({ key?, url, body?, target })` | POST and store result at state path |
+| `post({ key?, url, body?, onSuccess?, onError? })` | POST with callbacks |
+| `put/patch/delete` | Same params as `post` |
 
-Options: `{ body?, headers?, onSuccess?(data)?, onError?(error)? }`. For verb methods, pass `target` instead of `onSuccess` to store the result directly at a state path: `{ body, target: "path" }`.
+Pass `target` to store the response directly at a state path, or `onSuccess` for custom handling. Both are optional.
 
 **Status tracking:** `getStatus(key)` returns `{ status, error }` where `status` has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`. Call `resetStatus(key)` to return a single operation to `idle`, or `resetStatus()` with no arguments to reset all operations at once.
 
@@ -139,14 +138,14 @@ Inside `api.fetch`, use `this.http` to make HTTP calls through the store's confi
 
 ```typescript
 async fetchDashboard() {
-  await this.api.fetch("dashboard", async () => {
+  await this.api.fetch({ key: "dashboard", fn: async () => {
     const [todos, stats] = await Promise.all([
       this.http.request<Todo[]>("/api/todos"),
       this.http.request<Stats>("/api/stats"),
     ]);
 
     this.state.merge({ todos, stats });
-  });
+  }});
 }
 ```
 
@@ -290,7 +289,7 @@ class TodoDetailStore extends ReactSnapStore<{ todo: Todo | null }, "fetch"> {
   }
 
   fetchTodo(id: string) {
-    return this.api.get("fetch", `/api/todos/${id}`, "todo");
+    return this.api.get({ key: "fetch", url: `/api/todos/${id}`, target: "todo" });
   }
 }
 
@@ -372,7 +371,7 @@ import { scoped } from "@thalesfp/snapstate/react";
 class TodoDetailStore extends ReactSnapStore<{ todo: Todo | null }, "fetch"> {
   constructor() { super({ todo: null }); }
   fetchTodo(id: string) {
-    return this.api.get("fetch", `/api/todos/${id}`, "todo");
+    return this.api.get({ key: "fetch", url: `/api/todos/${id}`, target: "todo" });
   }
 }
 
@@ -447,7 +446,7 @@ class LoginStore extends SnapFormStore<LoginValues, "login"> {
 
   login() {
     return this.submit("login", async (values) => {
-      await this.api.post("login", "/api/login", { body: values });
+      await this.api.post({ key: "login", url: "/api/login", body: values });
     });
   }
 }

@@ -264,7 +264,7 @@ describe("setHttpClient export", () => {
 describe("resetStatus", () => {
   class TestStore extends SnapStore<{ value: string }, "load" | "save"> {
     doFetch(key: "load" | "save", fn: () => Promise<void>) {
-      return this.api.fetch(key, fn);
+      return this.api.fetch({ key, fn });
     }
   }
 
@@ -372,7 +372,7 @@ describe("resetStatus", () => {
 describe("SnapStore async race condition", () => {
   class TestStore extends SnapStore<{ value: string }, "op"> {
     doFetch(key: "op", fn: () => Promise<void>) {
-      return this.api.fetch(key, fn);
+      return this.api.fetch({ key, fn });
     }
   }
 

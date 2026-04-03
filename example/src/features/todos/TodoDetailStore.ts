@@ -13,13 +13,13 @@ export class TodoDetailStore extends SnapStore<TodoDetailState, "fetch"> {
   }
 
   fetchTodo(id: string) {
-    return this.api.fetch("fetch", async () => {
+    return this.api.fetch({ key: "fetch", fn: async () => {
       const [todo, activity] = await Promise.all([
         this.http.request<Todo>(`/api/todos/${id}`),
         this.http.request<Activity[]>(`/api/todos/${id}/activity`),
       ]);
 
       this.state.merge({ todo, activity });
-    });
+    }});
   }
 }

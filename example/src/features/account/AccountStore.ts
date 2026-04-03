@@ -36,7 +36,9 @@ export class AccountStore extends SnapFormStore<ProfileValues, "update"> {
     const data = this.validate();
     if (!data) return;
     this.syncSubmitStatus("update");
-    return this.api.patch<{ token: string; user: User }>("update", "/api/account/profile", {
+    return this.api.patch<{ token: string; user: User }>({
+      key: "update",
+      url: "/api/account/profile",
       body: data,
       onSuccess: (result) => {
         this.setInitialValues({

@@ -221,71 +221,55 @@ export interface StateAccessor<T extends object> {
   reset(...paths: DotPaths<T>[]): void;
 }
 
-/** Options for HTTP verb methods with a state path target instead of `onSuccess`. */
-export type ApiTargetOptions = Omit<ApiRequestOptions, "onSuccess">;
+/** Base params shared by all HTTP verb methods. */
+export interface ApiBaseParams<K extends string> {
+  key?: K;
+  url: string;
+  body?: unknown;
+  headers?: Record<string, string>;
+  onError?: (error: Error) => void;
+}
+
+/** Verb params that store the response at a state path. */
+export type ApiTargetParams<K extends string, P extends string> = ApiBaseParams<K> & { target: P };
+
+/** Verb params with an optional success callback. */
+export type ApiCallbackParams<K extends string, R = unknown> = ApiBaseParams<K> & { onSuccess?: (data: R) => void };
 
 /** Methods for async operations with automatic status tracking. Accessed via `this.api` inside a `SnapStore` subclass. */
 export interface ApiAccessor<K extends string, T extends object = object> {
   /**
-   * Wrap an async operation with automatic status tracking (`loading` → `ready` / `error`).
-   * Status is tracked under the given `key` and readable via `getStatus(key)`.
-   * @example
-   * await this.api.fetch("todos", async () => {
-   *   const data = await fetchTodos()
-   *   this.state.set("todos", data)
-   * })
+   * Wrap an async operation with automatic status tracking. When `key` is omitted, no status is tracked.
+   * @example await this.api.fetch({ key: "todos", fn: async () => { ... } })
+   * @example await this.api.fetch({ fn: async () => { ... } })
    */
-  fetch(key: K, fn: () => Promise<void>): Promise<void>;
+  fetch(params: { key?: K; fn: () => Promise<void> }): Promise<void>;
   /**
    * Perform a GET request and store the result at a state path.
-   * @example await this.api.get("todos", "/api/todos", "todos")
+   * @example await this.api.get({ url: "/api/todos", target: "todos" })
    */
-  get<P extends DotPaths<T>>(key: K, url: string, target: P): Promise<void>;
+  get<P extends DotPaths<T>>(params: { key?: K; url: string; target: P }): Promise<void>;
   /**
    * Perform a GET request with a callback.
-   * @example await this.api.get("todos", "/api/todos", data => this.state.set("todos", data))
+   * @example await this.api.get({ key: "fetch", url: "/api/todos", onSuccess: (data) => ... })
    */
-  get<R = unknown>(key: K, url: string, onSuccess?: (data: R) => void): Promise<void>;
-  /**
-   * Perform a POST request and store the result at a state path.
-   * @example await this.api.post("createTodo", "/api/todos", { body: { title: "New" }, target: "currentTodo" })
-   */
-  post<P extends DotPaths<T>>(key: K, url: string, options: ApiTargetOptions & { target: P }): Promise<void>;
-  /**
-   * Perform a POST request. Status is tracked under `key`.
-   * @example await this.api.post("createTodo", "/api/todos", { body: { title: "New" } })
-   */
-  post<R = unknown>(key: K, url: string, options?: ApiRequestOptions<R>): Promise<void>;
-  /**
-   * Perform a PUT request and store the result at a state path.
-   * @example await this.api.put("updateTodo", "/api/todos/1", { body: updated, target: "currentTodo" })
-   */
-  put<P extends DotPaths<T>>(key: K, url: string, options: ApiTargetOptions & { target: P }): Promise<void>;
-  /**
-   * Perform a PUT request. Status is tracked under `key`.
-   * @example await this.api.put("updateTodo", "/api/todos/1", { body: updated })
-   */
-  put<R = unknown>(key: K, url: string, options?: ApiRequestOptions<R>): Promise<void>;
-  /**
-   * Perform a PATCH request and store the result at a state path.
-   * @example await this.api.patch("patchTodo", "/api/todos/1", { body: { done: true }, target: "currentTodo" })
-   */
-  patch<P extends DotPaths<T>>(key: K, url: string, options: ApiTargetOptions & { target: P }): Promise<void>;
-  /**
-   * Perform a PATCH request. Status is tracked under `key`.
-   * @example await this.api.patch("patchTodo", "/api/todos/1", { body: { done: true } })
-   */
-  patch<R = unknown>(key: K, url: string, options?: ApiRequestOptions<R>): Promise<void>;
-  /**
-   * Perform a DELETE request and store the result at a state path.
-   * @example await this.api.delete("removeTodo", "/api/todos/1", { target: "lastDeleted" })
-   */
-  delete<P extends DotPaths<T>>(key: K, url: string, options: ApiTargetOptions & { target: P }): Promise<void>;
-  /**
-   * Perform a DELETE request. Status is tracked under `key`.
-   * @example await this.api.delete("removeTodo", "/api/todos/1")
-   */
-  delete<R = unknown>(key: K, url: string, options?: ApiRequestOptions<R>): Promise<void>;
+  get<R = unknown>(params: { key?: K; url: string; onSuccess?: (data: R) => void }): Promise<void>;
+  /** @example await this.api.post({ url: "/api/todos", body: { title: "New" }, target: "currentTodo" }) */
+  post<P extends DotPaths<T>>(params: ApiTargetParams<K, P>): Promise<void>;
+  /** @example await this.api.post({ key: "create", url: "/api/todos", body: { title: "New" } }) */
+  post<R = unknown>(params: ApiCallbackParams<K, R>): Promise<void>;
+  /** @example await this.api.put({ url: "/api/todos/1", body: updated, target: "currentTodo" }) */
+  put<P extends DotPaths<T>>(params: ApiTargetParams<K, P>): Promise<void>;
+  /** @example await this.api.put({ key: "update", url: "/api/todos/1", body: updated }) */
+  put<R = unknown>(params: ApiCallbackParams<K, R>): Promise<void>;
+  /** @example await this.api.patch({ url: "/api/todos/1", body: { done: true }, target: "currentTodo" }) */
+  patch<P extends DotPaths<T>>(params: ApiTargetParams<K, P>): Promise<void>;
+  /** @example await this.api.patch({ key: "toggle", url: "/api/todos/1", body: { done: true } }) */
+  patch<R = unknown>(params: ApiCallbackParams<K, R>): Promise<void>;
+  /** @example await this.api.delete({ url: "/api/todos/1", target: "lastDeleted" }) */
+  delete<P extends DotPaths<T>>(params: ApiTargetParams<K, P>): Promise<void>;
+  /** @example await this.api.delete({ key: "remove", url: "/api/todos/1" }) */
+  delete<R = unknown>(params: ApiCallbackParams<K, R>): Promise<void>;
 }
 
 /** Standalone reactive store returned by `createStore()`. */
