@@ -1,6 +1,6 @@
 {
   "name": "@thalesfp/snapstate",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "State management for React - testable, extensible, predictable class-based stores",
   "type": "module",
   "main": "./dist/index.cjs",
