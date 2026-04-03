@@ -27,7 +27,7 @@ class TodoStore extends ReactSnapStore<State, "load"> {
   }
 
   loadTodos() {
-    return this.api.get("load", "/api/todos", (data) => this.state.set("todos", data));
+    return this.api.get("load", "/api/todos", "todos");
   }
 
   addTodo(text: string) {
@@ -113,13 +113,14 @@ Every operation is keyed. Concurrent calls to the same key use take-latest seman
 | Method | Description |
 |---|---|
 | `fetch(key, fn)` | Run async function with tracked status |
-| `get(key, url, onSuccess?)` | GET request |
+| `get(key, url, path)` | GET and store result at state path |
+| `get(key, url, onSuccess?)` | GET with callback |
 | `post(key, url, options?)` | POST request |
 | `put(key, url, options?)` | PUT request |
 | `patch(key, url, options?)` | PATCH request |
 | `delete(key, url, options?)` | DELETE request |
 
-Options: `{ body?, headers?, onSuccess?(data)?, onError?(error)? }`
+Options: `{ body?, headers?, onSuccess?(data)?, onError?(error)? }`. For verb methods, pass `target` instead of `onSuccess` to store the result directly at a state path: `{ body, target: "path" }`.
 
 **Status tracking:** `getStatus(key)` returns `{ status, error }` where `status` has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`. Call `resetStatus(key)` to return a single operation to `idle`, or `resetStatus()` with no arguments to reset all operations at once.
 
@@ -291,7 +292,7 @@ class TodoDetailStore extends ReactSnapStore<{ todo: Todo | null }, "fetch"> {
   }
 
   fetchTodo(id: string) {
-    return this.api.get("fetch", `/api/todos/${id}`, (todo) => this.state.set("todo", todo));
+    return this.api.get("fetch", `/api/todos/${id}`, "todo");
   }
 }
 
@@ -373,7 +374,7 @@ import { scoped } from "@thalesfp/snapstate/react";
 class TodoDetailStore extends ReactSnapStore<{ todo: Todo | null }, "fetch"> {
   constructor() { super({ todo: null }); }
   fetchTodo(id: string) {
-    return this.api.get("fetch", `/api/todos/${id}`, (todo) => this.state.set("todo", todo));
+    return this.api.get("fetch", `/api/todos/${id}`, "todo");
   }
 }
 

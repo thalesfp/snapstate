@@ -185,3 +185,77 @@ describe("per-store httpClient", () => {
     expect(store.getSnapshot().data).toBe("later");
   });
 });
+
+describe("path shorthand", () => {
+  interface TargetState {
+    name: string;
+    items: string[];
+  }
+
+  class TargetStore extends SnapStore<TargetState, "op"> {
+    getWithPath(url: string) {
+      return this.api.get("op", url, "name");
+    }
+
+    getWithCallback(url: string) {
+      return this.api.get<string>("op", url, (d) => {
+        this.state.set("name", d);
+      });
+    }
+
+    postWithTarget(url: string, body: unknown) {
+      return this.api.post("op", url, { body, target: "items" });
+    }
+
+    postWithCallback(url: string, body: unknown) {
+      return this.api.post<string[]>("op", url, {
+        body,
+        onSuccess: (d) => {
+          this.state.set("items", d);
+        },
+      });
+    }
+
+    snapshot() {
+      return this.getSnapshot();
+    }
+  }
+
+  let mockClient: HttpClient;
+  let store: TargetStore;
+
+  beforeEach(() => {
+    mockClient = { request: vi.fn().mockResolvedValue("hello") };
+    store = new TargetStore({ name: "", items: [] }, { httpClient: mockClient });
+  });
+
+  it("api.get sets state at the given path", async () => {
+    await store.getWithPath("/api/name");
+
+    expect(store.snapshot().name).toBe("hello");
+  });
+
+  it("api.get still works with a callback", async () => {
+    await store.getWithCallback("/api/name");
+
+    expect(store.snapshot().name).toBe("hello");
+  });
+
+  it("api.post with target sets state at the given path", async () => {
+    (mockClient.request as ReturnType<typeof vi.fn>).mockResolvedValue(["a", "b"]);
+    await store.postWithTarget("/api/items", { x: 1 });
+
+    expect(store.snapshot().items).toEqual(["a", "b"]);
+  });
+
+  it("api.post with onSuccess callback still works", async () => {
+    (mockClient.request as ReturnType<typeof vi.fn>).mockResolvedValue(["c"]);
+    await store.postWithCallback("/api/items", { x: 1 });
+
+    expect(store.snapshot().items).toEqual(["c"]);
+  });
+
+  it("api.get with no third arg does not throw", async () => {
+    await store.api.get("op" as never, "/api/void");
+  });
+});

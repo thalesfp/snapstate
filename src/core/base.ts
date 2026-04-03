@@ -13,6 +13,8 @@ import type {
   GetByPath,
 } from "./types.js";
 import { asyncStatus } from "./types.js";
+
+type SendOptions = ApiRequestOptions & { target?: string };
 import { createStore } from "./store.js";
 
 const IDLE_STATE: OperationState = { status: asyncStatus("idle"), error: null };
@@ -69,7 +71,7 @@ export class SnapStore<T extends object, K extends string = string> {
   }
 
   protected readonly state: StateAccessor<T>;
-  protected readonly api: ApiAccessor<K>;
+  protected readonly api: ApiAccessor<K, T>;
 
   constructor(initialState: T, options?: StoreOptions) {
     this._store = createStore(initialState, options);
@@ -103,15 +105,19 @@ export class SnapStore<T extends object, K extends string = string> {
       store.notify();
     };
 
-    const doSend = async <R>(key: K, method: string, url: string, options?: ApiRequestOptions<R>): Promise<void> => {
+    const doSend = async (key: K, method: string, url: string, options?: SendOptions): Promise<void> => {
       await doFetch(key, async () => {
         try {
-          const data = await resolveClient().request<R>(url, {
+          const data = await resolveClient().request(url, {
             method,
             body: options?.body,
             headers: options?.headers,
           });
-          options?.onSuccess?.(data);
+          if (typeof options?.target === "string") {
+            store.set(options.target as never, data as never);
+          } else {
+            options?.onSuccess?.(data);
+          }
         } catch (e) {
           options?.onError?.(e instanceof Error ? e : new Error("Unknown error"));
           throw e;
@@ -193,16 +199,20 @@ export class SnapStore<T extends object, K extends string = string> {
 
     this.api = {
       fetch: doFetch,
-      get: async <R>(key: K, url: string, onSuccess?: (data: R) => void): Promise<void> => {
+      get: async (key: K, url: string, target?: string | ((data: unknown) => void)): Promise<void> => {
         await doFetch(key, async () => {
-          const data = await resolveClient().request<R>(url);
-          onSuccess?.(data);
+          const data = await resolveClient().request(url);
+          if (typeof target === "string") {
+            store.set(target as never, data as never);
+          } else {
+            target?.(data);
+          }
         });
       },
-      post: (key, url, options?) => doSend(key, "POST", url, options),
-      put: (key, url, options?) => doSend(key, "PUT", url, options),
-      patch: (key, url, options?) => doSend(key, "PATCH", url, options),
-      delete: (key, url, options?) => doSend(key, "DELETE", url, options),
+      post: (key: K, url: string, options?: SendOptions) => doSend(key, "POST", url, options),
+      put: (key: K, url: string, options?: SendOptions) => doSend(key, "PUT", url, options),
+      patch: (key: K, url: string, options?: SendOptions) => doSend(key, "PATCH", url, options),
+      delete: (key: K, url: string, options?: SendOptions) => doSend(key, "DELETE", url, options),
     };
   }
 
