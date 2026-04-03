@@ -114,6 +114,7 @@ All methods take a single params object. When `key` is provided, the operation i
 | Method | Description |
 |---|---|
 | `fetch({ key?, fn })` | Run async function, optionally tracked |
+| `all({ key?, requests })` | Parallel GETs, each stored at a target path |
 | `get({ key?, url, target })` | GET and store result at state path |
 | `get({ key?, url, onSuccess? })` | GET with callback |
 | `post({ key?, url, body?, target })` | POST and store result at state path |
@@ -132,9 +133,24 @@ store.resetStatus("fetchUsers");
 store.resetStatus();
 ```
 
+### Parallel requests (`api.all`)
+
+Load multiple endpoints in parallel under a single tracked operation. Each request stores its response at the specified `target` path:
+
+```typescript
+async fetchDashboard() {
+  await this.api.all({ key: "dashboard", requests: [
+    { url: "/api/todos", target: "todos" },
+    { url: "/api/stats", target: "stats" },
+  ]});
+}
+```
+
+Targets are type-safe -- each must be a valid state path.
+
 ### Raw HTTP access (`this.http`)
 
-Inside `api.fetch`, use `this.http` to make HTTP calls through the store's configured client without creating a separate tracked operation. This is useful for parallel requests or multi-step flows:
+For cases `api.all` doesn't cover (non-GET requests, custom response handling), use `this.http` inside `api.fetch` to make HTTP calls through the store's configured client without creating a separate tracked operation:
 
 ```typescript
 async fetchDashboard() {

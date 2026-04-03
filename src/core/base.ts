@@ -120,6 +120,12 @@ export class SnapStore<T extends object, K extends string = string> {
       }
     };
 
+    const captureGen = (key: K | undefined): (() => boolean) => {
+      if (key === undefined) { return () => false; }
+      const gen = generations.get(key);
+      return () => generations.get(key) !== gen;
+    };
+
     const doSend = async (method: string, params: SendParams<K>): Promise<void> => {
       await runOrTrack(params.key, async () => {
         try {
@@ -135,6 +141,29 @@ export class SnapStore<T extends object, K extends string = string> {
           }
         } catch (e) {
           params.onError?.(e instanceof Error ? e : new Error("Unknown error"));
+          throw e;
+        }
+      });
+    };
+
+    const doGet = async (params: SendParams<K>): Promise<void> => {
+      await runOrTrack(params.key, async () => {
+        const stale = captureGen(params.key);
+        try {
+          const data = await resolveClient().request(params.url, {
+            method: "GET",
+            headers: params.headers,
+          });
+          if (stale()) { return; }
+          if (typeof params.target === "string") {
+            store.set(params.target as never, data as never);
+          } else {
+            params.onSuccess?.(data);
+          }
+        } catch (e) {
+          if (!stale()) {
+            params.onError?.(e instanceof Error ? e : new Error("Unknown error"));
+          }
           throw e;
         }
       });
@@ -223,7 +252,32 @@ export class SnapStore<T extends object, K extends string = string> {
       fetch: async (params: { key?: K; fn: () => Promise<void> }): Promise<void> => {
         await runOrTrack(params.key, params.fn);
       },
-      get: (params: SendParams<K>) => doSend("GET", params),
+      all: async (params: { key?: K; requests: Array<{ url: string; target: string; headers?: Record<string, string> }>; onError?: (error: Error) => void }) => {
+        await runOrTrack(params.key, async () => {
+          const stale = captureGen(params.key);
+          try {
+            const results = await Promise.all(
+              params.requests.map((req) => resolveClient().request(req.url, {
+                method: "GET",
+                headers: req.headers,
+              }))
+            );
+
+            if (stale()) { return; }
+            store.batch(() => {
+              params.requests.forEach((req, i) => {
+                store.set(req.target as never, results[i] as never);
+              });
+            });
+          } catch (e) {
+            if (!stale()) {
+              params.onError?.(e instanceof Error ? e : new Error("Unknown error"));
+            }
+            throw e;
+          }
+        });
+      },
+      get: (params: SendParams<K>) => doGet(params),
       post: (params: SendParams<K>) => doSend("POST", params),
       put: (params: SendParams<K>) => doSend("PUT", params),
       patch: (params: SendParams<K>) => doSend("PATCH", params),
