@@ -2,12 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-vi.mock("snapstate/react", () => ({
-  connect: () => (target: any) => target,
-}));
-
 vi.mock("../../stores", () => ({
   todoStore: {
+    connect: (c: any) => c,
     setFilter: vi.fn(),
     clearCompleted: vi.fn(),
   },

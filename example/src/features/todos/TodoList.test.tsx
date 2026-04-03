@@ -1,12 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-vi.mock("snapstate/react", () => ({
-  connect: () => (target: any) => target,
-}));
-
 vi.mock("../../stores", () => ({
-  todoStore: {},
+  todoStore: { connect: (c: any) => c },
 }));
 
 vi.mock("./TodoItem", () => ({

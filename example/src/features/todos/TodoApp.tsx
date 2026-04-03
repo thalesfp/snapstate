@@ -11,12 +11,9 @@ function TodoAppInner() {
   return (
     <>
       <TodoInput />
-      {/* @ts-expect-error props injected by @connect decorator */}
       <TodoList />
       <div className="footer">
-        {/* @ts-expect-error props injected by @connect decorator */}
         <TodoCount />
-        {/* @ts-expect-error props injected by @connect decorator */}
         <FilterBar />
       </div>
     </>
