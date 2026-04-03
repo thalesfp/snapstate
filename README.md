@@ -1,5 +1,7 @@
 # Snapstate
 
+> **Alpha** — This library is under active development. APIs may change between releases.
+
 State management for React. Class-based stores that are easy to test, easy to extend, and predictable by default.
 
 ```bash
