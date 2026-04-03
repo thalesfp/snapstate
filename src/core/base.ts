@@ -7,15 +7,22 @@ import type {
   HttpClient,
   StateAccessor,
   ApiAccessor,
-  ApiRequestOptions,
   Subscribable,
   DotPaths,
   GetByPath,
 } from "./types.js";
 import { asyncStatus } from "./types.js";
-
-type SendOptions = ApiRequestOptions & { target?: string };
 import { createStore } from "./store.js";
+
+interface SendParams<K> {
+  key?: K;
+  url: string;
+  body?: unknown;
+  headers?: Record<string, string>;
+  target?: string;
+  onSuccess?: (data: unknown) => void;
+  onError?: (error: Error) => void;
+}
 
 const IDLE_STATE: OperationState = { status: asyncStatus("idle"), error: null };
 
@@ -84,7 +91,7 @@ export class SnapStore<T extends object, K extends string = string> {
 
     // takeLatest semantic: if a newer call starts for the same key, the older
     // call's promise resolves silently (no reject, no state update).
-    const doFetch = async (key: K, fn: () => Promise<void>): Promise<void> => {
+    const doTracked = async (key: K, fn: () => Promise<void>): Promise<void> => {
       const gen = (generations.get(key) ?? 0) + 1;
       generations.set(key, gen);
       operations.set(key, { status: asyncStatus("loading"), error: null });
@@ -105,21 +112,29 @@ export class SnapStore<T extends object, K extends string = string> {
       store.notify();
     };
 
-    const doSend = async (key: K, method: string, url: string, options?: SendOptions): Promise<void> => {
-      await doFetch(key, async () => {
+    const runOrTrack = async (key: K | undefined, fn: () => Promise<void>): Promise<void> => {
+      if (key !== undefined) {
+        await doTracked(key, fn);
+      } else {
+        await fn();
+      }
+    };
+
+    const doSend = async (method: string, params: SendParams<K>): Promise<void> => {
+      await runOrTrack(params.key, async () => {
         try {
-          const data = await resolveClient().request(url, {
+          const data = await resolveClient().request(params.url, {
             method,
-            body: options?.body,
-            headers: options?.headers,
+            body: params.body,
+            headers: params.headers,
           });
-          if (typeof options?.target === "string") {
-            store.set(options.target as never, data as never);
+          if (typeof params.target === "string") {
+            store.set(params.target as never, data as never);
           } else {
-            options?.onSuccess?.(data);
+            params.onSuccess?.(data);
           }
         } catch (e) {
-          options?.onError?.(e instanceof Error ? e : new Error("Unknown error"));
+          params.onError?.(e instanceof Error ? e : new Error("Unknown error"));
           throw e;
         }
       });
@@ -205,21 +220,14 @@ export class SnapStore<T extends object, K extends string = string> {
     };
 
     this.api = {
-      fetch: doFetch,
-      get: async (key: K, url: string, target?: string | ((data: unknown) => void)): Promise<void> => {
-        await doFetch(key, async () => {
-          const data = await resolveClient().request(url);
-          if (typeof target === "string") {
-            store.set(target as never, data as never);
-          } else {
-            target?.(data);
-          }
-        });
+      fetch: async (params: { key?: K; fn: () => Promise<void> }): Promise<void> => {
+        await runOrTrack(params.key, params.fn);
       },
-      post: (key: K, url: string, options?: SendOptions) => doSend(key, "POST", url, options),
-      put: (key: K, url: string, options?: SendOptions) => doSend(key, "PUT", url, options),
-      patch: (key: K, url: string, options?: SendOptions) => doSend(key, "PATCH", url, options),
-      delete: (key: K, url: string, options?: SendOptions) => doSend(key, "DELETE", url, options),
+      get: (params: SendParams<K>) => doSend("GET", params),
+      post: (params: SendParams<K>) => doSend("POST", params),
+      put: (params: SendParams<K>) => doSend("PUT", params),
+      patch: (params: SendParams<K>) => doSend("PATCH", params),
+      delete: (params: SendParams<K>) => doSend("DELETE", params),
     };
   }
 

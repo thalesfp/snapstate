@@ -285,10 +285,10 @@ describe("connect", () => {
       }
 
       save(promise: Promise<void>) {
-        return this.api.fetch("save", async () => {
+        return this.api.fetch({ key: "save", fn: async () => {
           await promise;
           this.state.set("value", "saved");
-        });
+        }});
       }
     }
 

@@ -27,7 +27,9 @@ export class LoginFormStore extends SnapFormStore<LoginValues, "login"> {
     
     this.syncSubmitStatus("login");
 
-    return this.api.post<{ token: string; user: User }>("login", "/api/auth/login", {
+    return this.api.post<{ token: string; user: User }>({
+      key: "login",
+      url: "/api/auth/login",
       body: data,
       onSuccess: (result) => {
         this.auth.setUser(result.user);

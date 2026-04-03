@@ -536,7 +536,7 @@ export class SnapFormStore<
   ): Promise<void> | undefined {
     const data = this.validate();
     if (!data) return undefined;
-    const promise = this.api.fetch(key, () => handler(data));
+    const promise = this.api.fetch({ key, fn: () => handler(data) });
     this.syncSubmitStatus(key);
     return promise;
   }
