@@ -19,10 +19,7 @@ export class TodoDetailStore extends SnapStore<TodoDetailState, "fetch"> {
         this.http.request<Activity[]>(`/api/todos/${id}/activity`),
       ]);
 
-      this.state.batch(() => {
-        this.state.set("todo", todo);
-        this.state.set("activity", activity);
-      });
+      this.state.merge({ todo, activity });
     });
   }
 }

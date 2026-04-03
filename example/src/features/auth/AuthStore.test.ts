@@ -41,7 +41,7 @@ describe("AuthStore", () => {
     });
 
     it("sets error status on invalid credentials", async () => {
-      await store.login("wrong@email.com", "wrong").catch(() => {});
+      try { await store.login("wrong@email.com", "wrong"); } catch {}
       expect(store.getStatus("login").status.isError).toBe(true);
       expect(store.getStatus("login").error).toBe("Invalid credentials");
       expect(store.isAuthenticated).toBe(false);
