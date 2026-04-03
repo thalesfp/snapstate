@@ -216,8 +216,11 @@ export interface StateAccessor<T extends object> {
   reset(...paths: DotPaths<T>[]): void;
 }
 
+/** Options for HTTP verb methods with a state path target instead of `onSuccess`. */
+export type ApiTargetOptions = Omit<ApiRequestOptions, "onSuccess">;
+
 /** Methods for async operations with automatic status tracking. Accessed via `this.api` inside a `SnapStore` subclass. */
-export interface ApiAccessor<K extends string> {
+export interface ApiAccessor<K extends string, T extends object = object> {
   /**
    * Wrap an async operation with automatic status tracking (`loading` → `ready` / `error`).
    * Status is tracked under the given `key` and readable via `getStatus(key)`.
@@ -229,25 +232,50 @@ export interface ApiAccessor<K extends string> {
    */
   fetch(key: K, fn: () => Promise<void>): Promise<void>;
   /**
-   * Perform a GET request. Status is tracked under `key`.
+   * Perform a GET request and store the result at a state path.
+   * @example await this.api.get("todos", "/api/todos", "todos")
+   */
+  get<P extends DotPaths<T>>(key: K, url: string, target: P): Promise<void>;
+  /**
+   * Perform a GET request with a callback.
    * @example await this.api.get("todos", "/api/todos", data => this.state.set("todos", data))
    */
   get<R = unknown>(key: K, url: string, onSuccess?: (data: R) => void): Promise<void>;
+  /**
+   * Perform a POST request and store the result at a state path.
+   * @example await this.api.post("createTodo", "/api/todos", { body: { title: "New" }, target: "currentTodo" })
+   */
+  post<P extends DotPaths<T>>(key: K, url: string, options: ApiTargetOptions & { target: P }): Promise<void>;
   /**
    * Perform a POST request. Status is tracked under `key`.
    * @example await this.api.post("createTodo", "/api/todos", { body: { title: "New" } })
    */
   post<R = unknown>(key: K, url: string, options?: ApiRequestOptions<R>): Promise<void>;
   /**
+   * Perform a PUT request and store the result at a state path.
+   * @example await this.api.put("updateTodo", "/api/todos/1", { body: updated, target: "currentTodo" })
+   */
+  put<P extends DotPaths<T>>(key: K, url: string, options: ApiTargetOptions & { target: P }): Promise<void>;
+  /**
    * Perform a PUT request. Status is tracked under `key`.
    * @example await this.api.put("updateTodo", "/api/todos/1", { body: updated })
    */
   put<R = unknown>(key: K, url: string, options?: ApiRequestOptions<R>): Promise<void>;
   /**
+   * Perform a PATCH request and store the result at a state path.
+   * @example await this.api.patch("patchTodo", "/api/todos/1", { body: { done: true }, target: "currentTodo" })
+   */
+  patch<P extends DotPaths<T>>(key: K, url: string, options: ApiTargetOptions & { target: P }): Promise<void>;
+  /**
    * Perform a PATCH request. Status is tracked under `key`.
    * @example await this.api.patch("patchTodo", "/api/todos/1", { body: { done: true } })
    */
   patch<R = unknown>(key: K, url: string, options?: ApiRequestOptions<R>): Promise<void>;
+  /**
+   * Perform a DELETE request and store the result at a state path.
+   * @example await this.api.delete("removeTodo", "/api/todos/1", { target: "lastDeleted" })
+   */
+  delete<P extends DotPaths<T>>(key: K, url: string, options: ApiTargetOptions & { target: P }): Promise<void>;
   /**
    * Perform a DELETE request. Status is tracked under `key`.
    * @example await this.api.delete("removeTodo", "/api/todos/1")
