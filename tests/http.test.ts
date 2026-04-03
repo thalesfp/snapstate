@@ -258,3 +258,265 @@ describe("named params", () => {
     expect(store.getStatus("op").status.isReady).toBe(true);
   });
 });
+
+describe("api.all", () => {
+  interface DashboardState {
+    users: string[];
+    stats: { count: number };
+  }
+
+  class DashboardStore extends SnapStore<DashboardState, "fetch"> {
+    snapshot() {
+      return this.getSnapshot();
+    }
+  }
+
+  let mockClient: { request: ReturnType<typeof vi.fn> };
+  let store: DashboardStore;
+
+  beforeEach(() => {
+    mockClient = { request: vi.fn() };
+    store = new DashboardStore(
+      { users: [], stats: { count: 0 } },
+      { httpClient: mockClient },
+    );
+  });
+
+  it("stores results at their target paths", async () => {
+    mockClient.request
+      .mockResolvedValueOnce(["alice", "bob"])
+      .mockResolvedValueOnce({ count: 42 });
+
+    await store.api.all({ key: "fetch", requests: [
+      { url: "/api/users", target: "users" },
+      { url: "/api/stats", target: "stats" },
+    ]});
+
+    expect(store.snapshot().users).toEqual(["alice", "bob"]);
+    expect(store.snapshot().stats).toEqual({ count: 42 });
+  });
+
+  it("sets status to ready on success", async () => {
+    mockClient.request.mockResolvedValue([]);
+
+    await store.api.all({ key: "fetch", requests: [
+      { url: "/api/users", target: "users" },
+    ]});
+
+    expect(store.getStatus("fetch").status.isReady).toBe(true);
+  });
+
+  it("skips status tracking when key is omitted", async () => {
+    mockClient.request.mockResolvedValue([]);
+
+    await store.api.all({ requests: [
+      { url: "/api/users", target: "users" },
+    ]});
+
+    expect(store.getStatus("fetch").status.isIdle).toBe(true);
+  });
+
+  it("sets status to error when a request fails", async () => {
+    mockClient.request
+      .mockResolvedValueOnce(["alice"])
+      .mockRejectedValueOnce(new Error("Server error"));
+
+    await expect(store.api.all({ key: "fetch", requests: [
+      { url: "/api/users", target: "users" },
+      { url: "/api/stats", target: "stats" },
+    ]})).rejects.toThrow("Server error");
+
+    expect(store.getStatus("fetch").status.isError).toBe(true);
+    expect(store.getStatus("fetch").error).toBe("Server error");
+  });
+
+  it("calls onError when a request fails", async () => {
+    const onError = vi.fn();
+    mockClient.request.mockRejectedValue(new Error("fail"));
+
+    await expect(store.api.all({ key: "fetch", requests: [
+      { url: "/api/users", target: "users" },
+    ], onError })).rejects.toThrow("fail");
+
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "fail" }));
+  });
+
+  it("sends GET requests with correct URLs", async () => {
+    mockClient.request.mockResolvedValue([]);
+
+    await store.api.all({ requests: [
+      { url: "/api/users", target: "users" },
+      { url: "/api/stats", target: "stats" },
+    ]});
+
+    expect(mockClient.request).toHaveBeenCalledWith("/api/users", { method: "GET", headers: undefined });
+    expect(mockClient.request).toHaveBeenCalledWith("/api/stats", { method: "GET", headers: undefined });
+  });
+
+  it("forwards per-request headers", async () => {
+    mockClient.request.mockResolvedValue([]);
+
+    await store.api.all({ requests: [
+      { url: "/api/users", target: "users", headers: { "X-Custom": "value" } },
+    ]});
+
+    expect(mockClient.request).toHaveBeenCalledWith("/api/users", { method: "GET", headers: { "X-Custom": "value" } });
+  });
+});
+
+describe("take-latest guards state mutations", () => {
+  interface State {
+    name: string;
+    items: string[];
+  }
+
+  class RaceStore extends SnapStore<State, "op"> {
+    snapshot() {
+      return this.getSnapshot();
+    }
+  }
+
+  it("stale api.get with target does not overwrite state", async () => {
+    let resolveOld!: (v: unknown) => void;
+    let resolveNew!: (v: unknown) => void;
+
+    const mockClient: HttpClient = {
+      request: vi.fn()
+        .mockReturnValueOnce(new Promise((r) => { resolveOld = r; }))
+        .mockReturnValueOnce(new Promise((r) => { resolveNew = r; })),
+    };
+    const store = new RaceStore({ name: "", items: [] }, { httpClient: mockClient });
+
+    const oldCall = store.api.get({ key: "op", url: "/api/name", target: "name" });
+    const newCall = store.api.get({ key: "op", url: "/api/name", target: "name" });
+
+    resolveNew("new-value");
+    await newCall;
+    expect(store.snapshot().name).toBe("new-value");
+
+    resolveOld("old-value");
+    await oldCall;
+    expect(store.snapshot().name).toBe("new-value");
+  });
+
+  it("stale api.get with onSuccess does not call callback", async () => {
+    let resolveOld!: (v: unknown) => void;
+    let resolveNew!: (v: unknown) => void;
+    const onSuccessOld = vi.fn();
+
+    const mockClient: HttpClient = {
+      request: vi.fn()
+        .mockReturnValueOnce(new Promise((r) => { resolveOld = r; }))
+        .mockReturnValueOnce(new Promise((r) => { resolveNew = r; })),
+    };
+    const store = new RaceStore({ name: "", items: [] }, { httpClient: mockClient });
+
+    const oldCall = store.api.get<string>({ key: "op", url: "/api/name", onSuccess: onSuccessOld });
+    const newCall = store.api.get<string>({ key: "op", url: "/api/name", onSuccess: () => {} });
+
+    resolveNew("new");
+    await newCall;
+
+    resolveOld("old");
+    await oldCall;
+    expect(onSuccessOld).not.toHaveBeenCalled();
+  });
+
+  it("stale api.get error does not call onError", async () => {
+    let rejectOld!: (e: Error) => void;
+    let resolveNew!: (v: unknown) => void;
+    const onErrorOld = vi.fn();
+
+    const mockClient: HttpClient = {
+      request: vi.fn()
+        .mockReturnValueOnce(new Promise((_, r) => { rejectOld = r; }))
+        .mockReturnValueOnce(new Promise((r) => { resolveNew = r; })),
+    };
+    const store = new RaceStore({ name: "", items: [] }, { httpClient: mockClient });
+
+    const oldCall = store.api.get<string>({ key: "op", url: "/api/name", onError: onErrorOld });
+    const newCall = store.api.get<string>({ key: "op", url: "/api/name" });
+
+    resolveNew("new");
+    await newCall;
+
+    rejectOld(new Error("stale error"));
+    await oldCall;
+    expect(onErrorOld).not.toHaveBeenCalled();
+  });
+
+  it("stale api.all does not store results", async () => {
+    let resolveOld!: (v: unknown) => void;
+    let resolveNew!: (v: unknown) => void;
+
+    const mockClient: HttpClient = {
+      request: vi.fn()
+        .mockReturnValueOnce(new Promise((r) => { resolveOld = r; }))
+        .mockReturnValueOnce(new Promise((r) => { resolveNew = r; })),
+    };
+    const store = new RaceStore({ name: "", items: [] }, { httpClient: mockClient });
+
+    const oldCall = store.api.all({ key: "op", requests: [
+      { url: "/api/name", target: "name" },
+    ]});
+    const newCall = store.api.all({ key: "op", requests: [
+      { url: "/api/name", target: "name" },
+    ]});
+
+    resolveNew("new-value");
+    await newCall;
+    expect(store.snapshot().name).toBe("new-value");
+
+    resolveOld("old-value");
+    await oldCall;
+    expect(store.snapshot().name).toBe("new-value");
+  });
+
+  it("overlapping api.post with same key both call onSuccess", async () => {
+    let resolveFirst!: (v: unknown) => void;
+    let resolveSecond!: (v: unknown) => void;
+    const onSuccessFirst = vi.fn();
+    const onSuccessSecond = vi.fn();
+
+    const mockClient: HttpClient = {
+      request: vi.fn()
+        .mockReturnValueOnce(new Promise((r) => { resolveFirst = r; }))
+        .mockReturnValueOnce(new Promise((r) => { resolveSecond = r; })),
+    };
+    const store = new RaceStore({ name: "", items: [] }, { httpClient: mockClient });
+
+    const first = store.api.post<string>({ key: "op", url: "/api/name", body: {}, onSuccess: onSuccessFirst });
+    const second = store.api.post<string>({ key: "op", url: "/api/name", body: {}, onSuccess: onSuccessSecond });
+
+    resolveSecond("second");
+    await second;
+    expect(onSuccessSecond).toHaveBeenCalledWith("second");
+
+    resolveFirst("first");
+    await first;
+    expect(onSuccessFirst).toHaveBeenCalledWith("first");
+  });
+
+  it("failed mutation onError still fires when another mutation with same key is in flight", async () => {
+    let rejectFirst!: (e: Error) => void;
+    let resolveSecond!: (v: unknown) => void;
+    const onErrorFirst = vi.fn();
+
+    const mockClient: HttpClient = {
+      request: vi.fn()
+        .mockReturnValueOnce(new Promise((_, r) => { rejectFirst = r; }))
+        .mockReturnValueOnce(new Promise((r) => { resolveSecond = r; })),
+    };
+    const store = new RaceStore({ name: "", items: [] }, { httpClient: mockClient });
+
+    const first = store.api.patch<string>({ key: "op", url: "/api/name", body: {}, onError: onErrorFirst });
+    const second = store.api.patch<string>({ key: "op", url: "/api/name", body: {} });
+
+    resolveSecond("second");
+    await second;
+
+    rejectFirst(new Error("network error"));
+    await first;
+    expect(onErrorFirst).toHaveBeenCalledWith(expect.objectContaining({ message: "network error" }));
+  });
+});

@@ -236,6 +236,11 @@ export type ApiTargetParams<K extends string, P extends string> = ApiBaseParams<
 /** Verb params with an optional success callback. */
 export type ApiCallbackParams<K extends string, R = unknown> = ApiBaseParams<K> & { onSuccess?: (data: R) => void };
 
+/** A single request entry for `api.all`. Each target is independently validated as a valid state path. */
+export type AllRequest<T extends object> = {
+  [P in DotPaths<T>]: { url: string; target: P; headers?: Record<string, string> };
+}[DotPaths<T>];
+
 /** Methods for async operations with automatic status tracking. Accessed via `this.api` inside a `SnapStore` subclass. */
 export interface ApiAccessor<K extends string, T extends object = object> {
   /**
@@ -244,6 +249,15 @@ export interface ApiAccessor<K extends string, T extends object = object> {
    * @example await this.api.fetch({ fn: async () => { ... } })
    */
   fetch(params: { key?: K; fn: () => Promise<void> }): Promise<void>;
+  /**
+   * Run multiple GET requests in parallel under a single tracked operation.
+   * Each request stores its result at the specified `target` path.
+   * @example await this.api.all({ key: "dashboard", requests: [
+   *   { url: "/api/todos", target: "todos" },
+   *   { url: "/api/stats", target: "stats" },
+   * ]})
+   */
+  all(params: { key?: K; requests: AllRequest<T>[]; onError?: (error: Error) => void }): Promise<void>;
   /**
    * Perform a GET request and store the result at a state path.
    * @example await this.api.get({ url: "/api/todos", target: "todos" })
