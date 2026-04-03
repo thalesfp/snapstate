@@ -18,6 +18,8 @@ interface Todo {
   id: string;
   text: string;
   completed: boolean;
+  completedAt?: string;
+  createdAt: string;
 }
 
 const DEFAULT_DEMO_USERS: Array<User & { password: string }> = [
@@ -27,9 +29,9 @@ const DEFAULT_DEMO_USERS: Array<User & { password: string }> = [
 const DEMO_USERS: Array<User & { password: string }> = DEFAULT_DEMO_USERS.map((u) => ({ ...u }));
 
 const initialTodos: Todo[] = [
-  { id: "1", text: "Learn snapstate", completed: true },
-  { id: "2", text: "Build a todo app", completed: false },
-  { id: "3", text: "Add fetch support", completed: false },
+  { id: "1", text: "Learn snapstate", completed: true, completedAt: "2024-12-01T10:00:00Z", createdAt: "2024-12-01T09:00:00Z" },
+  { id: "2", text: "Build a todo app", completed: false, createdAt: "2024-12-01T09:30:00Z" },
+  { id: "3", text: "Add fetch support", completed: false, createdAt: "2024-12-01T09:45:00Z" },
 ];
 
 const todosByUser = new Map<string, { todos: Todo[]; nextId: number }>();
@@ -147,6 +149,20 @@ app.get("/api/todos/:id", async (c) => {
   return c.json(todo);
 });
 
+app.get("/api/todos/:id/activity", async (c) => {
+  const user = c.get("user" as never) as unknown as User;
+  const id = c.req.param("id");
+  const data = getUserTodos(user.id);
+  const todo = data.todos.find((t) => t.id === id);
+  if (!todo) { return c.json({ error: "Not found" }, 404); }
+  await delay(200);
+  const activity = [
+    { id: "1", action: "Created", timestamp: todo.createdAt },
+    ...(todo.completed ? [{ id: "2", action: "Completed", timestamp: todo.completedAt ?? new Date().toISOString() }] : []),
+  ];
+  return c.json(activity);
+});
+
 app.get("/api/todos", async (c) => {
   const user = c.get("user" as never) as unknown as User;
   const data = getUserTodos(user.id);
@@ -158,7 +174,7 @@ app.post("/api/todos", async (c) => {
   const user = c.get("user" as never) as unknown as User;
   const { text } = await c.req.json();
   const data = getUserTodos(user.id);
-  const todo: Todo = { id: String(data.nextId++), text, completed: false };
+  const todo: Todo = { id: String(data.nextId++), text, completed: false, createdAt: new Date().toISOString() };
   data.todos.push(todo);
   await delay(300);
   return c.json(todo);
@@ -171,7 +187,12 @@ app.patch("/api/todos/:id", async (c) => {
   const data = getUserTodos(user.id);
   const todo = data.todos.find((t) => t.id === id);
   if (!todo) return c.json({ error: "Not found" }, 404);
+
   Object.assign(todo, updates);
+  if (typeof updates.completed === "boolean") {
+    todo.completedAt = updates.completed ? new Date().toISOString() : undefined;
+  }
+
   await delay(300);
   return c.json(todo);
 });

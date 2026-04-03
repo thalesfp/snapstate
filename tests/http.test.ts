@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { SnapStore, setDefaultHeaders } from "../src/index.js";
+import { SnapStore, setDefaultHeaders, setHttpClient } from "../src/index.js";
+import type { HttpClient } from "../src/index.js";
 
 const mockFetch = vi.fn();
 
@@ -9,6 +10,15 @@ class TestStore extends SnapStore<{ data: string }, "op"> {
   }
   doPost(url: string, body: unknown, headers?: Record<string, string>) {
     return this.api.post("op", url, { body, headers });
+  }
+}
+
+class HttpClientStore extends TestStore {
+  doFetchWithHttp(url: string) {
+    return this.api.fetch("op", async () => {
+      const data = await this.http.request<string>(url);
+      this.state.set("data", data);
+    });
   }
 }
 
@@ -115,5 +125,63 @@ describe("error responses", () => {
     });
     const store = new TestStore({ data: "" });
     await expect(store.doGet("/api")).rejects.toThrow("HTTP 500");
+  });
+});
+
+describe("per-store httpClient", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("uses the provided httpClient instead of the global one", async () => {
+    const mockClient: HttpClient = { request: vi.fn().mockResolvedValue("custom") };
+    const store = new HttpClientStore({ data: "" }, { httpClient: mockClient });
+    await store.doGet("/api");
+
+    expect(mockClient.request).toHaveBeenCalledWith("/api");
+    expect(store.getSnapshot().data).toBe("custom");
+  });
+
+  it("does not call global fetch when per-store client is set", async () => {
+    mockFetch.mockReset();
+    vi.stubGlobal("fetch", mockFetch);
+
+    const mockClient: HttpClient = { request: vi.fn().mockResolvedValue("local") };
+    const store = new HttpClientStore({ data: "" }, { httpClient: mockClient });
+    await store.doGet("/api");
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("exposes http for use inside api.fetch", async () => {
+    const mockClient: HttpClient = { request: vi.fn().mockResolvedValue("via-http") };
+    const store = new HttpClientStore({ data: "" }, { httpClient: mockClient });
+    await store.doFetchWithHttp("/api/data");
+
+    expect(mockClient.request).toHaveBeenCalledWith("/api/data");
+    expect(store.getSnapshot().data).toBe("via-http");
+  });
+
+  it("falls back to global client when no per-store client is set", async () => {
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValue({ ok: true, text: () => Promise.resolve('"global"') });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const store = new HttpClientStore({ data: "" });
+    await store.doGet("/api");
+
+    expect(mockFetch).toHaveBeenCalled();
+    expect(store.getSnapshot().data).toBe("global");
+  });
+
+  it("setHttpClient affects stores created before the call", async () => {
+    const store = new HttpClientStore({ data: "" });
+    const laterClient: HttpClient = { request: vi.fn().mockResolvedValue("later") };
+
+    setHttpClient(laterClient);
+    await store.doGet("/api");
+
+    expect(laterClient.request).toHaveBeenCalledWith("/api");
+    expect(store.getSnapshot().data).toBe("later");
   });
 });

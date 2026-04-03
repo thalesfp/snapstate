@@ -94,10 +94,17 @@ Stores hold state, expose methods, and notify subscribers. State changes use dot
 | `remove(path, predicate)` | Remove matching items |
 | `removeAt(path, index)` | Remove at index (supports negative) |
 | `at(path, index)` | Get item at index (supports negative) |
-| `filter(path, predicate)` | Return matching items |
-| `find(path, predicate)` | Return first match |
+| `filter(path, predicate)` | Return matching items (supports type predicates) |
+| `find(path, predicate)` | Return first match (supports type predicates) |
 | `findIndexOf(path, predicate)` | Index of first match, or -1 |
 | `count(path, predicate)` | Count matching items |
+
+`filter` and `find` accept type predicates to narrow discriminated unions:
+
+```typescript
+const completed = this.state.filter("todos", (t): t is CompletedTodo => t.completed);
+// completed is CompletedTodo[], not Todo[]
+```
 
 ### Async operations (`this.api.*`)
 
@@ -114,7 +121,35 @@ Every operation is keyed. Concurrent calls to the same key use take-latest seman
 
 Options: `{ body?, headers?, onSuccess?(data)?, onError?(error)? }`
 
-**Status tracking:** `getStatus(key)` returns `{ status, error }` where `status` has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`. Call `resetStatus(key)` to return an operation to `idle`, distinguishing "never loaded" from "loaded empty".
+**Status tracking:** `getStatus(key)` returns `{ status, error }` where `status` has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`. Call `resetStatus(key)` to return a single operation to `idle`, or `resetStatus()` with no arguments to reset all operations at once.
+
+```typescript
+// Reset a single operation (e.g. before a retry)
+store.resetStatus("fetchUsers");
+
+// Reset all operations (e.g. when the store is reused for a different context)
+store.resetStatus();
+```
+
+### Raw HTTP access (`this.http`)
+
+Inside `api.fetch`, use `this.http` to make HTTP calls through the store's configured client without creating a separate tracked operation. This is useful for parallel requests or multi-step flows:
+
+```typescript
+async fetchDashboard() {
+  await this.api.fetch("dashboard", async () => {
+    const [todos, stats] = await Promise.all([
+      this.http.request<Todo[]>("/api/todos"),
+      this.http.request<Stats>("/api/stats"),
+    ]);
+
+    this.state.batch(() => {
+      this.state.set("todos", todos);
+      this.state.set("stats", stats);
+    });
+  });
+}
+```
 
 ### Cross-store derivation (`this.derive`)
 
@@ -592,6 +627,16 @@ setHttpClient({
     return text ? JSON.parse(text) : undefined;
   },
 });
+```
+
+You can also pass a per-store `httpClient` via constructor options. This overrides the global client for that store only, which is useful for testing:
+
+```typescript
+const mockClient: HttpClient = {
+  async request(url) { return { id: "1", name: "Test" }; },
+};
+
+const store = new UserStore({ httpClient: mockClient });
 ```
 
 ## Example App

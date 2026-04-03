@@ -75,6 +75,8 @@ export type Updater<V> = V | ((prev: V) => V);
 export interface StoreOptions {
   /** Auto-batch synchronous sets via microtask (default: true) */
   autoBatch?: boolean;
+  /** Override the global HTTP client for this store. Useful for testing or per-store configuration. */
+  httpClient?: HttpClient;
 }
 
 /** Handle to a computed (derived) value. Call `get()` to read, `destroy()` to stop tracking. */
@@ -178,10 +180,20 @@ export interface StateAccessor<T extends object> {
    */
   at<P extends ArrayPaths<T>>(path: P, index: number): ElementOf<T[P]> | undefined;
   /**
+   * Return all items from an array field that match a type predicate, narrowing the return type.
+   * @example this.state.filter("orgs", (o): o is StandaloneOrg => o.source === "standalone")
+   */
+  filter<P extends ArrayPaths<T>, S extends ElementOf<T[P]>>(path: P, predicate: (item: ElementOf<T[P]>) => item is S): S[];
+  /**
    * Return all items from an array field that match a predicate.
    * @example this.state.filter("todos", t => !t.done)
    */
   filter<P extends ArrayPaths<T>>(path: P, predicate: (item: ElementOf<T[P]>) => boolean): ElementOf<T[P]>[];
+  /**
+   * Return the first item from an array field that matches a type predicate, narrowing the return type.
+   * @example this.state.find("orgs", (o): o is StandaloneOrg => o.source === "standalone")
+   */
+  find<P extends ArrayPaths<T>, S extends ElementOf<T[P]>>(path: P, predicate: (item: ElementOf<T[P]>) => item is S): S | undefined;
   /**
    * Return the first item from an array field that matches a predicate.
    * @example this.state.find("todos", t => t.id === 1)

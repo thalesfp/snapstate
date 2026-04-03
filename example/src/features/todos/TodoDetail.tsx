@@ -3,9 +3,16 @@ import { SnapStore } from "snapstate/react";
 import { TodoDetailStore } from "./TodoDetailStore";
 import { TodoDetailLayout } from "./TodoDetailLayout";
 import { TodoDetailError } from "./TodoDetailError";
-import type { Todo } from "../../shared/types";
+import type { Todo, Activity } from "../../shared/types";
 
-function TodoDetailInner({ todo }: { id: string; todo: Todo | null }) {
+function TodoDetailInner({
+  todo,
+  activity,
+}: {
+  id: string;
+  todo: Todo | null;
+  activity: Activity[];
+}) {
   return (
     <>
       {!todo ? (
@@ -16,8 +23,17 @@ function TodoDetailInner({ todo }: { id: string; todo: Todo | null }) {
           <span
             className={`todo-detail-status ${todo.completed ? "completed" : "active"}`}
           >
-            {todo.completed ? "Completed" : "Active"}
+            {todo.completed ? `Completed ${new Date(todo.completedAt).toLocaleDateString()}` : "Active"}
           </span>
+          {activity.length > 0 && (
+            <ul className="todo-detail-activity">
+              {activity.map((a) => (
+                <li key={a.id}>
+                  {a.action} - {new Date(a.timestamp).toLocaleString()}
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       )}
       <Link className="todo-detail-back" to="/todos">
@@ -29,7 +45,10 @@ function TodoDetailInner({ todo }: { id: string; todo: Todo | null }) {
 
 export const TodoDetail = SnapStore.scoped(TodoDetailInner, {
   factory: () => new TodoDetailStore(),
-  props: (store: TodoDetailStore) => ({ todo: store.getSnapshot().todo }),
+  props: (store: TodoDetailStore) => {
+    const snapshot = store.getSnapshot();
+    return { todo: snapshot.todo, activity: snapshot.activity };
+  },
   template: TodoDetailLayout,
   loading: () => <div className="loading-spinner" />,
   error: TodoDetailError,

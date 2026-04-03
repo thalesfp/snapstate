@@ -252,3 +252,63 @@ describe("array methods", () => {
     });
   });
 });
+
+describe("type predicate overloads", () => {
+  type Standalone = { id: number; source: "standalone" };
+  type Imported = { id: number; source: "imported" };
+  type Mixed = Standalone | Imported;
+
+  interface PredicateState {
+    items: Mixed[];
+  }
+
+  class PredicateStore extends SnapStore<PredicateState, never> {
+    constructor(items: Mixed[]) {
+      super({ items });
+    }
+
+    filterStandalone(): Standalone[] {
+      return this.state.filter("items", (o): o is Standalone => o.source === "standalone");
+    }
+
+    findStandalone(): Standalone | undefined {
+      return this.state.find("items", (o): o is Standalone => o.source === "standalone");
+    }
+
+    snapshot() {
+      return this.getSnapshot();
+    }
+  }
+
+  const items: Mixed[] = [
+    { id: 1, source: "standalone" },
+    { id: 2, source: "imported" },
+    { id: 3, source: "standalone" },
+  ];
+
+  it("filter narrows type with type predicate", () => {
+    const store = new PredicateStore(items);
+    const result = store.filterStandalone();
+
+    expect(result).toEqual([
+      { id: 1, source: "standalone" },
+      { id: 3, source: "standalone" },
+    ]);
+    expect(result.every((r) => r.source === "standalone")).toBe(true);
+  });
+
+  it("find narrows type with type predicate", () => {
+    const store = new PredicateStore(items);
+    const result = store.findStandalone();
+
+    expect(result).toEqual({ id: 1, source: "standalone" });
+    expect(result?.source).toBe("standalone");
+  });
+
+  it("find returns undefined when no match", () => {
+    const store = new PredicateStore([{ id: 1, source: "imported" }]);
+    const result = store.findStandalone();
+
+    expect(result).toBeUndefined();
+  });
+});

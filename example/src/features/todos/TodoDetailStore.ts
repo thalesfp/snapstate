@@ -1,18 +1,28 @@
 import { SnapStore } from "snapstate/react";
-import type { Todo } from "../../shared/types";
+import type { StoreOptions } from "snapstate";
+import type { Todo, Activity } from "../../shared/types";
 
 interface TodoDetailState {
   todo: Todo | null;
+  activity: Activity[];
 }
 
 export class TodoDetailStore extends SnapStore<TodoDetailState, "fetch"> {
-  constructor() {
-    super({ todo: null });
+  constructor(options?: StoreOptions) {
+    super({ todo: null, activity: [] }, options);
   }
 
   fetchTodo(id: string) {
-    return this.api.get<Todo>("fetch", `/api/todos/${id}`, (todo) => {
-      this.state.set("todo", todo);
+    return this.api.fetch("fetch", async () => {
+      const [todo, activity] = await Promise.all([
+        this.http.request<Todo>(`/api/todos/${id}`),
+        this.http.request<Activity[]>(`/api/todos/${id}/activity`),
+      ]);
+
+      this.state.batch(() => {
+        this.state.set("todo", todo);
+        this.state.set("activity", activity);
+      });
     });
   }
 }

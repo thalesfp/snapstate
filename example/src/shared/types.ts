@@ -1,7 +1,23 @@
-export interface Todo {
+export interface BaseTodo {
   id: string;
   text: string;
-  completed: boolean;
+}
+
+export interface ActiveTodo extends BaseTodo {
+  completed: false;
+}
+
+export interface CompletedTodo extends BaseTodo {
+  completed: true;
+  completedAt: string;
+}
+
+export type Todo = ActiveTodo | CompletedTodo;
+
+export interface Activity {
+  id: string;
+  action: string;
+  timestamp: string;
 }
 
 export const FILTER_VALUES = ["all", "active", "completed"] as const;
