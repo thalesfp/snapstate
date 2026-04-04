@@ -454,6 +454,84 @@ describe("connect with select", () => {
   });
 });
 
+describe("connect with select (array shorthand)", () => {
+  interface ArrayState {
+    user: { name: string; avatar: string };
+    settings: { theme: string };
+  }
+
+  class ArrayStore extends SnapStore<ArrayState> {
+    constructor() {
+      super({ user: { name: "Alice", avatar: "a.png" }, settings: { theme: "dark" } });
+    }
+
+    setUser(u: ArrayState["user"]) {
+      this.state.set("user", u);
+    }
+
+    setTheme(t: string) {
+      this.state.set("settings.theme", t);
+    }
+  }
+
+  it("injects correct props from array of keys", () => {
+    const store = new ArrayStore();
+
+    function Display({ user, settings }: { user: ArrayState["user"]; settings: ArrayState["settings"] }) {
+      return createElement("span", { "data-testid": "val" }, `${user.name}:${settings.theme}`);
+    }
+
+    const Connected = store.connect(Display, {
+      select: ["user", "settings"],
+    });
+    render(createElement(Connected));
+
+    expect(screen.getByTestId("val").textContent).toBe("Alice:dark");
+  });
+
+  it("re-renders when a selected key changes", async () => {
+    const store = new ArrayStore();
+
+    function Display({ user }: { user: ArrayState["user"] }) {
+      return createElement("span", { "data-testid": "val" }, user.name);
+    }
+
+    const Connected = store.connect(Display, {
+      select: ["user"],
+    });
+    render(createElement(Connected));
+
+    await actTL(async () => {
+      store.setUser({ name: "Bob", avatar: "b.png" });
+    });
+
+    expect(screen.getByTestId("val").textContent).toBe("Bob");
+  });
+
+  it("does not re-render when a non-selected key changes", async () => {
+    const store = new ArrayStore();
+    let renderCount = 0;
+
+    function Display({ user }: { user: ArrayState["user"] }) {
+      renderCount++;
+      return createElement("span", { "data-testid": "val" }, user.name);
+    }
+
+    const Connected = store.connect(Display, {
+      select: ["user"],
+    });
+    render(createElement(Connected));
+    const initialRenders = renderCount;
+
+    await actTL(async () => {
+      store.setTheme("light");
+    });
+
+    expect(renderCount).toBe(initialRenders);
+    expect(screen.getByTestId("val").textContent).toBe("Alice");
+  });
+});
+
 describe("connect with select + fetch", () => {
   interface NestedState {
     user: { name: string; avatar: string };

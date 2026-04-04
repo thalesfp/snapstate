@@ -133,6 +133,40 @@ export interface SelectFetchConnectConfig<T extends object, S, MappedProps, Own 
 }
 
 /**
+ * Connect config using an array of top-level keys for granular subscriptions.
+ * Shorthand for `select: pick => ({ key: pick("key"), ... })`.
+ * @example select: ["user", "todos"]
+ */
+export interface SelectArrayConnectConfig<
+  T extends object,
+  S,
+  Keys extends readonly (keyof T & string)[],
+  Own = OwnProps,
+  Params extends Record<string, unknown> = Record<string, unknown>,
+> {
+  select: [...Keys];
+  fetch?: (store: S, props: Own, params: Params) => Promise<void>;
+  urlParams?: UrlParams<Params>;
+  setup?: (store: S, props: Own, params: Params) => void;
+  cleanup?: (store: S, props: Own) => void;
+  deps?: (props: Own, params: Params) => unknown[];
+  loading?: React.ComponentType;
+  error?: React.ComponentType<{ error: string }>;
+  template?: React.ComponentType<Pick<T, Keys[number]> & { children: React.ReactNode }>;
+}
+
+/** `SelectArrayConnectConfig` variant where `fetch` is required — enables loading/error UI. */
+export interface SelectArrayFetchConnectConfig<
+  T extends object,
+  S,
+  Keys extends readonly (keyof T & string)[],
+  Own = OwnProps,
+  Params extends Record<string, unknown> = Record<string, unknown>,
+> extends SelectArrayConnectConfig<T, S, Keys, Own, Params> {
+  fetch: (store: S, props: Own, params: Params) => Promise<void>;
+}
+
+/**
  * Connect config for component-scoped stores. Each mount creates a fresh store instance via `factory`.
  * The store is destroyed on unmount.
  */
@@ -384,6 +418,17 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
     Component: React.ComponentType<P>,
     config: ConnectPropsConfig<this, MappedProps, Omit<P, keyof MappedProps>>,
   ): React.FC<Omit<P, keyof MappedProps>>;
+  /** Wire a component with array-based `select` shorthand plus async `fetch`. Top-level keys only. */
+  connect<P extends object, Keys extends readonly (keyof T & string)[]>(
+    Component: React.ComponentType<P>,
+    config: SelectArrayFetchConnectConfig<T, this, Keys, Omit<P, Keys[number] | "status" | "error">>,
+  ): React.FC<Omit<P, Keys[number] | "status" | "error">>;
+  /** Wire a component with array-based `select` shorthand. Top-level keys only.
+   *  @example store.connect(View, { select: ["user", "todos"] }) */
+  connect<P extends object, Keys extends readonly (keyof T & string)[]>(
+    Component: React.ComponentType<P>,
+    config: SelectArrayConnectConfig<T, this, Keys, Omit<P, Keys[number]>>,
+  ): React.FC<Omit<P, Keys[number]>>;
   /** Wire a component with granular `select` subscriptions plus async `fetch` for mount-time init. */
   connect<P extends object, MappedProps extends Record<string, unknown>>(
     Component: React.ComponentType<P>,
@@ -402,12 +447,34 @@ export class ReactSnapStore<T extends object, K extends string = string> extends
       | ((store: this) => MappedProps)
       | ConnectPropsConfig<this, MappedProps>
       | ConnectConfig<this, MappedProps>
-      | SelectConnectConfig<T, this, MappedProps>,
+      | SelectConnectConfig<T, this, MappedProps>
+      | SelectArrayConnectConfig<T, this, readonly (keyof T & string)[]>,
   ): React.FC<Omit<P, keyof MappedProps>> {
     const store = this;
 
     if (typeof configOrMapper === "object" && "select" in configOrMapper) {
-      return this._connectWithSelect<P, MappedProps>(Component, configOrMapper);
+      if (Array.isArray(configOrMapper.select)) {
+        const keys = configOrMapper.select;
+        const normalized = {
+          ...configOrMapper,
+          select: (pick: PickFn<T>) => {
+            const result: Record<string, unknown> = {};
+            for (const key of keys) {
+              result[key] = pick(key as DotPaths<T>);
+            }
+            return result;
+          },
+        };
+        return this._connectWithSelect<P, MappedProps>(
+          Component,
+          normalized as SelectConnectConfig<T, typeof store, MappedProps, Omit<P, keyof MappedProps>>,
+        );
+      }
+
+      return this._connectWithSelect<P, MappedProps>(
+        Component,
+        configOrMapper as SelectConnectConfig<T, typeof store, MappedProps, Omit<P, keyof MappedProps>>,
+      );
     }
 
     const config = typeof configOrMapper === "function"

@@ -44,7 +44,7 @@ function AppLayoutInner({ user }: { user: User | null }) {
 }
 
 const AppLayout = authStore.connect(AppLayoutInner, {
-  select: (pick) => ({ user: pick("user") }),
+  select: ["user"],
 });
 
 export function App() {

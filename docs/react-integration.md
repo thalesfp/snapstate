@@ -105,7 +105,15 @@ const ConnectedProfile = userStore.connect(UserProfile, {
 
 ## connect() -- Select Mode
 
-For granular subscriptions, use `select` to subscribe only to specific paths:
+For granular subscriptions, pass an array of top-level keys:
+
+```tsx
+const ConnectedTodos = store.connect(TodoView, {
+  select: ["todos", "filter"],
+});
+```
+
+For nested paths, use the callback form with `pick`:
 
 ```tsx
 const ConnectedName = store.connect(NameDisplay, {
@@ -117,7 +125,7 @@ const ConnectedName = store.connect(NameDisplay, {
 
 Paths are captured once at connect-time. The component only re-renders when the selected paths change, not on every store update.
 
-Select mode also supports `fetch`:
+Both forms support `fetch`:
 
 ```tsx
 const ConnectedName = store.connect(NameDisplay, {

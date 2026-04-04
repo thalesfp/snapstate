@@ -244,6 +244,16 @@ const UserProfile = userStore.connect(ProfileView, {
 
 ### Granular subscriptions
 
+For top-level keys, pass an array:
+
+```tsx
+const TodoApp = todoStore.connect(TodoView, {
+  select: ["todos", "filter"],
+});
+```
+
+For nested paths, use the callback form with `pick`:
+
 ```tsx
 const UserCard = userStore.connect(CardView, {
   select: (pick) => ({
@@ -253,7 +263,7 @@ const UserCard = userStore.connect(CardView, {
 });
 ```
 
-`pick(path)` subscribes to that exact path -- the component only re-renders when those values change. `select` supports all lifecycle options (`fetch`, `setup`, `cleanup`, `loading`, `error`, `deps`).
+Both forms subscribe to the specified paths only -- the component re-renders only when those values change. `select` supports all lifecycle options (`fetch`, `setup`, `cleanup`, `loading`, `error`, `deps`).
 
 ### Lifecycle
 
@@ -281,7 +291,7 @@ All lifecycle options are safe in React StrictMode.
 
 ```tsx
 const ProjectDetail = projectStore.connect(ProjectView, {
-  select: (pick) => ({ project: pick("project") }),
+  select: ["project"],
   fetch: (s, props) => s.fetchProject(props.id),
   cleanup: (s) => s.reset(),
   deps: (props) => [props.id],
@@ -310,7 +320,7 @@ function TodoAppInner({ remaining }: { remaining: number }) {
 }
 
 const TodoApp = todoStore.connect(TodoAppInner, {
-  select: (pick) => ({ remaining: pick("remaining") }),
+  select: ["remaining"],
   fetch: (s) => s.loadTodos(),
   template: TodoLayout,
   loading: () => <Skeleton />,
