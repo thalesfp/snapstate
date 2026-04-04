@@ -1,6 +1,6 @@
 # Snapstate
 
-> **Alpha** — This library is under active development. APIs may change between releases.
+> **Alpha** — APIs may change between releases.
 
 State management for React. Class-based stores that are easy to test, easy to extend, and predictable by default.
 
@@ -8,16 +8,27 @@ State management for React. Class-based stores that are easy to test, easy to ex
 npm install @thalesfp/snapstate
 ```
 
+## Entry Points
+
+| Import | Description |
+|---|---|
+| `@thalesfp/snapstate` | Core `SnapStore`, types, `setHttpClient` |
+| `@thalesfp/snapstate/react` | `SnapStore` with `connect()` HOC |
+| `@thalesfp/snapstate/form` | `SnapFormStore` with Zod validation and form lifecycle |
+| `@thalesfp/snapstate/url` | `createUrlParams`, `syncToUrl` for URL search params |
+
+React and Zod are optional peer dependencies — only needed if you use their respective entry points. `qs` is bundled and requires no separate install.
+
 ## Quick Start
 
 ```ts
-import { ReactSnapStore } from "@thalesfp/snapstate/react";
+import { SnapStore } from "@thalesfp/snapstate/react";
 
 interface State {
   todos: { id: string; text: string; done: boolean }[];
 }
 
-class TodoStore extends ReactSnapStore<State, "load"> {
+class TodoStore extends SnapStore<State, "load"> {
   constructor() {
     super({ todos: [] });
   }
@@ -34,7 +45,7 @@ class TodoStore extends ReactSnapStore<State, "load"> {
     this.state.append("todos", { id: crypto.randomUUID(), text, done: false });
   }
 
-  toggle(id: string) {
+  complete(id: string) {
     this.state.patch("todos", (t) => t.id === id, { done: true });
   }
 }
@@ -47,7 +58,7 @@ function TodoListView({ todos }: { todos: State["todos"] }) {
   return (
     <ul>
       {todos.map((t) => (
-        <li key={t.id} onClick={() => todoStore.toggle(t.id)}>
+        <li key={t.id} onClick={() => todoStore.complete(t.id)}>
           {t.done ? <s>{t.text}</s> : t.text}
         </li>
       ))}
@@ -65,7 +76,7 @@ export const TodoList = todoStore.connect(TodoListView, {
 
 ## Stores
 
-Stores hold state, expose methods, and notify subscribers. State changes use dot-paths (`"user.name"`, `"items.0.title"`) tracked by a trie, so listeners only fire when their path changes. Synchronous `set()` calls are auto-batched via `queueMicrotask`, and every `set()` preserves reference identity for unchanged subtrees.
+Stores hold state, expose methods, and notify subscribers. State changes use dot-paths (`"user.name"`, `"items.0.title"`) so listeners only fire when their specific path changes. Synchronous `set()` calls are auto-batched via `queueMicrotask`, and every `set()` preserves reference identity for unchanged subtrees.
 
 `SnapStore<T, K>` is the base class. `T` is the state shape, `K` is the union of async operation keys.
 
@@ -107,6 +118,22 @@ const completed = this.state.filter("todos", (t): t is CompletedTodo => t.comple
 // completed is CompletedTodo[], not Todo[]
 ```
 
+`computed` derives a value from one or more state paths and recomputes lazily when any dependency changes. Create it once (in the constructor or as a class field) and call `.get()` to read it:
+
+```typescript
+class TodoStore extends SnapStore<State, never> {
+  private remaining = this.state.computed(["todos"], (s) =>
+    s.todos.filter((t) => !t.done).length
+  );
+
+  getRemainingCount() {
+    return this.remaining.get();
+  }
+}
+```
+
+Call `.destroy()` to stop tracking if you need to tear it down early; otherwise it cleans up with the store.
+
 ### Async operations (`this.api.*`)
 
 All methods take a single params object. When `key` is provided, the operation is tracked via `getStatus(key)` with take-latest semantics. When `key` is omitted, the request runs without status tracking.
@@ -115,13 +142,11 @@ All methods take a single params object. When `key` is provided, the operation i
 |---|---|
 | `fetch({ key?, fn })` | Run async function, optionally tracked |
 | `all({ key?, requests })` | Parallel GETs, each stored at a target path |
-| `get({ key?, url, target, onError? })` | GET and store result at state path |
-| `get({ key?, url, onSuccess?, onError? })` | GET with callback |
-| `post({ key?, url, body?, target })` | POST and store result at state path |
-| `post({ key?, url, body?, onSuccess?, onError? })` | POST with callbacks |
-| `put/patch/delete` | Same params as `post` |
+| `get({ key?, url, target?, onSuccess?, onError? })` | GET request |
+| `post({ key?, url, body?, target?, onSuccess?, onError? })` | POST request |
+| `put` / `patch` / `delete` | Same params as `post` |
 
-Pass `target` to store the response directly at a state path, or `onSuccess` for custom handling. Both are optional. When `onError` is provided, the error is handled and does not propagate to the caller. Without `onError`, errors are rethrown.
+Pass `target` to store the response directly at a state path, or `onSuccess` for custom handling — not both; `target` takes precedence if both are provided. When `onError` is provided, the error is handled and does not propagate to the caller. Without `onError`, errors are rethrown.
 
 **Status tracking:** `getStatus(key)` returns `{ status, error }` where `status` has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`. Call `resetStatus(key)` to return a single operation to `idle`, or `resetStatus()` with no arguments to reset all operations at once.
 
@@ -133,7 +158,7 @@ store.resetStatus("fetchUsers");
 store.resetStatus();
 ```
 
-### Parallel requests (`api.all`)
+#### Parallel requests (`api.all`)
 
 Load multiple endpoints in parallel under a single tracked operation. Each request stores its response at the specified `target` path:
 
@@ -148,7 +173,7 @@ async fetchDashboard() {
 
 Targets are type-safe -- each must be a valid state path.
 
-### Raw HTTP access (`this.http`)
+#### Raw HTTP access (`this.http`)
 
 For cases `api.all` doesn't cover (non-GET requests, custom response handling), use `this.http` inside `api.fetch` to make HTTP calls through the store's configured client without creating a separate tracked operation:
 
@@ -170,7 +195,7 @@ async fetchDashboard() {
 Keep a local state key in sync with a value selected from another store. Subscribes to the source, applies an `Object.is` change guard, and cleans up on `destroy()`.
 
 ```ts
-class ProjectsStore extends ReactSnapStore<{ companyId: string; projects: Project[] }, "fetch"> {
+class ProjectsStore extends SnapStore<{ companyId: string; projects: Project[] }, "fetch"> {
   constructor(company: Subscribable<{ currentCompany: { id: string } }>) {
     super({ companyId: "", projects: [] });
     this.derive("companyId", company, (s) => s.currentCompany.id);
@@ -191,11 +216,13 @@ The source accepts any `Subscribable` (every `SnapStore` satisfies this), so sto
 | `resetStatus(key?)` | Reset operation to idle |
 | `destroy()` | Tear down subscriptions and derivations |
 
-## Connect
+## React Integration
 
-`ReactSnapStore` extends `SnapStore` with a `connect()` HOC. Available from `@thalesfp/snapstate/react`.
+`SnapStore` from `@thalesfp/snapstate/react` extends the core store with a `connect()` HOC.
 
-### Map store to props
+### connect()
+
+Use the shorthand form when you only need to map props — pass the mapper function directly as the second argument:
 
 ```tsx
 const UserName = userStore.connect(
@@ -204,7 +231,7 @@ const UserName = userStore.connect(
 );
 ```
 
-### Data fetching
+Use the object form when you need lifecycle options (`fetch`, `setup`, `cleanup`, `loading`, `error`, `deps`):
 
 ```tsx
 const UserProfile = userStore.connect(ProfileView, {
@@ -294,12 +321,12 @@ The `template` component receives the same mapped props as the inner component, 
 
 ### Scoped stores
 
-`ReactSnapStore.scoped()` creates a store when the component mounts and destroys it on unmount. Each instance gets its own isolated store — useful for detail views, forms, or modals that need fresh state on every mount.
+`SnapStore.scoped()` creates a store when the component mounts and destroys it on unmount. Each instance gets its own isolated store — useful for detail views, forms, or modals that need fresh state on every mount.
 
 ```tsx
-import { ReactSnapStore } from "@thalesfp/snapstate/react";
+import { SnapStore } from "@thalesfp/snapstate/react";
 
-class TodoDetailStore extends ReactSnapStore<{ todo: Todo | null }, "fetch"> {
+class TodoDetailStore extends SnapStore<{ todo: Todo | null }, "fetch"> {
   constructor() {
     super({ todo: null });
   }
@@ -309,7 +336,7 @@ class TodoDetailStore extends ReactSnapStore<{ todo: Todo | null }, "fetch"> {
   }
 }
 
-const TodoDetail = ReactSnapStore.scoped(TodoDetailView, {
+const TodoDetail = SnapStore.scoped(TodoDetailView, {
   factory: () => new TodoDetailStore(),
   props: (store) => ({ todo: store.getSnapshot().todo }),
   fetch: (store, props) => store.fetchTodo(props.id),
@@ -322,7 +349,7 @@ No manual `cleanup` or `reset()` needed — `destroy()` runs automatically on un
 
 ## Forms
 
-`SnapFormStore<V, K>` extends `ReactSnapStore`. Available from `@thalesfp/snapstate/form`. Requires `zod` peer dependency.
+`SnapFormStore<V, K>` extends `SnapStore`. Available from `@thalesfp/snapstate/form`. Requires `zod` peer dependency.
 
 ```ts
 import { SnapFormStore } from "@thalesfp/snapstate/form";
@@ -386,7 +413,7 @@ export const LoginForm = loginStore.connect(LoginFormView, (s) => ({
 
 | Method | Description |
 |---|---|
-| `register(field)` | `{ ref, name, defaultValue, onBlur, onChange }` for form elements |
+| `register(field)` | Props for form elements: `ref`, `name`, `onBlur`, `onChange`, and `defaultValue` (or `defaultChecked` for boolean fields) |
 | `setValue(field, value)` | Set field value |
 | `getValue(field)` | Get current field value (reads from DOM ref if registered) |
 | `getValues()` | Get all current values |
@@ -403,11 +430,11 @@ Supported elements: text inputs, number, checkbox, textarea, select, range, radi
 
 ## URL Parameters
 
-`@thalesfp/snapstate/url` provides reactive URL search parameter reading and writing. Requires the `qs` peer dependency.
+`@thalesfp/snapstate/url` provides reactive URL search parameter reading and writing.
 
 ### Reading URL params
 
-`createUrlParams<T>()` returns a typed `Subscribable` that parses `window.location.search`. It automatically detects navigation via `popstate`, `pushState`, and `replaceState`.
+`createUrlParams<T>()` returns a typed `Subscribable` that parses `window.location.search`. It automatically detects navigation via `popstate`, `pushState`, and `replaceState` — the latter two are detected by patching `history.pushState` and `history.replaceState` globally, since the browser doesn't fire `popstate` for them.
 
 ```ts
 import { createUrlParams } from "@thalesfp/snapstate/url";
@@ -491,20 +518,9 @@ urlParams.destroy();  // Remove event listeners
 unsub();              // Stop syncing to URL (return value of syncToUrl)
 ```
 
-## Configuration
+## Custom HTTP Client
 
-### Entry points
-
-| Import | Description |
-|---|---|
-| `@thalesfp/snapstate` | Core `SnapStore`, types, `setHttpClient` |
-| `@thalesfp/snapstate/react` | `ReactSnapStore` with `connect()` HOC |
-| `@thalesfp/snapstate/form` | `SnapFormStore` with Zod validation and form lifecycle |
-| `@thalesfp/snapstate/url` | `createUrlParams`, `syncToUrl` for URL search params |
-
-React, Zod, and qs are optional peer dependencies -- only needed if you use their respective entry points.
-
-### Custom HTTP client
+By default, snapstate uses the native `fetch` API, sets no auth headers, and throws on non-2xx responses. Override it globally with `setHttpClient`, or per-store via constructor options.
 
 ```ts
 import { setHttpClient } from "@thalesfp/snapstate";
@@ -523,7 +539,7 @@ setHttpClient({
 });
 ```
 
-You can also pass a per-store `httpClient` via constructor options. This overrides the global client for that store only, which is useful for testing:
+Pass `httpClient` via constructor options to override the global client for that store only — useful for testing:
 
 ```typescript
 const mockClient: HttpClient = {
@@ -538,9 +554,9 @@ const store = new UserStore({ httpClient: mockClient });
 A full Vite + React 19 demo lives in [`example/`](./example/) with todos, auth, and account profile features.
 
 ```bash
-npm run build              # Build library first
-cd example && npm install  # Install example deps
-npm run example:dev        # Start dev server
+npm run build                  # Build library first
+cd example && npm install      # Install example deps (first time)
+cd .. && npm run example:dev   # Start dev server + mock API
 ```
 
 ## Benchmarks
