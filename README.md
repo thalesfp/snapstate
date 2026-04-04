@@ -1,8 +1,8 @@
 # Snapstate
 
-> **Alpha** — APIs may change between releases.
+> **Alpha** -- APIs may change between releases.
 
-State management for React. Class-based stores that are easy to test, easy to extend, and predictable by default.
+State management for React built around class-based stores: testable, extensible, and predictable by default.
 
 ```bash
 npm install @thalesfp/snapstate
@@ -25,7 +25,7 @@ Snapstate exists to keep business logic out of React components. React component
 | `@thalesfp/snapstate/form` | `SnapFormStore` with Zod validation and form lifecycle | `react`, `zod` |
 | `@thalesfp/snapstate/url` | `createUrlParams`, `syncToUrl` for URL search params | None |
 
-React and Zod are optional peer dependencies — only needed if you use their respective entry points. `qs` is bundled and requires no separate install.
+React and Zod are optional peer dependencies -- only needed if you use their respective entry points. `qs` is bundled and requires no separate install.
 
 ## Choose The Right API
 
@@ -184,7 +184,7 @@ All methods take a single params object. When `key` is provided, the operation i
 | `post({ key?, url, body?, target?, onSuccess?, onError? })` | POST request |
 | `put` / `patch` / `delete` | Same params as `post` |
 
-Pass `target` to store the response directly at a state path, or `onSuccess` for custom handling — not both; `target` takes precedence if both are provided. When `onError` is provided, the error is handled and does not propagate to the caller. Without `onError`, errors are rethrown.
+Pass `target` to store the response directly at a state path, or `onSuccess` for custom handling -- not both; `target` takes precedence if both are provided. When `onError` is provided, the error is handled and does not propagate to the caller. Without `onError`, errors are rethrown.
 
 **Status tracking:** `getStatus(key)` returns `{ status, error }` where `status` has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`. Call `resetStatus(key)` to return a single operation to `idle`, or `resetStatus()` with no arguments to reset all operations at once.
 
@@ -260,7 +260,7 @@ The source accepts any `Subscribable` (every `SnapStore` satisfies this), so sto
 
 ### connect()
 
-Use the shorthand form when you only need to map props — pass the mapper function directly as the second argument:
+Use the shorthand form when you only need to map props -- pass the mapper function directly as the second argument:
 
 ```tsx
 const UserName = userStore.connect(
@@ -337,7 +337,7 @@ const ProjectDetail = projectStore.connect(ProjectView, {
 });
 ```
 
-`deps` returns a dependency array from the component's own props (and optionally URL params — see [URL Parameters](#url-parameters)). When values change, `cleanup` runs for the previous deps, then `fetch` and `setup` re-run. Without `deps`, lifecycle callbacks run once on mount.
+`deps` returns a dependency array from the component's own props (and optionally URL params -- see [URL Parameters](#url-parameters)). When values change, `cleanup` runs for the previous deps, then `fetch` and `setup` re-run. Without `deps`, lifecycle callbacks run once on mount.
 
 ### Template
 
@@ -369,7 +369,7 @@ The `template` component receives the same mapped props as the inner component, 
 
 ### Scoped stores
 
-`SnapStore.scoped()` creates a store when the component mounts and destroys it on unmount. Each instance gets its own isolated store — useful for detail views, forms, or modals that need fresh state on every mount.
+`SnapStore.scoped()` creates a store when the component mounts and destroys it on unmount. Each instance gets its own isolated store -- useful for detail views, forms, or modals that need fresh state on every mount.
 
 ```tsx
 import { SnapStore } from "@thalesfp/snapstate/react";
@@ -393,7 +393,7 @@ const TodoDetail = SnapStore.scoped(TodoDetailView, {
 });
 ```
 
-No manual `cleanup` or `reset()` needed — `destroy()` runs automatically on unmount. All lifecycle options (`setup`, `cleanup`, `fetch`, `deps`, `loading`, `error`) work the same as in `connect`.
+No manual `cleanup` or `reset()` needed -- `destroy()` runs automatically on unmount. All lifecycle options (`setup`, `cleanup`, `fetch`, `deps`, `loading`, `error`) work the same as in `connect`.
 
 ## Forms
 
@@ -482,7 +482,7 @@ Supported elements: text inputs, number, checkbox, textarea, select, range, radi
 
 ### Reading URL params
 
-`createUrlParams<T>()` returns a typed `Subscribable` that parses `window.location.search`. It automatically detects navigation via `popstate`, `pushState`, and `replaceState` — the latter two are detected by patching `history.pushState` and `history.replaceState` globally, since the browser doesn't fire `popstate` for them.
+`createUrlParams<T>()` returns a typed `Subscribable` that parses `window.location.search`. It automatically detects navigation via `popstate`, `pushState`, and `replaceState` -- the latter two are detected by patching `history.pushState` and `history.replaceState` globally, since the browser doesn't fire `popstate` for them.
 
 ```ts
 import { createUrlParams } from "@thalesfp/snapstate/url";
@@ -587,7 +587,7 @@ setHttpClient({
 });
 ```
 
-Pass `httpClient` via constructor options to override the global client for that store only — useful for testing:
+Pass `httpClient` via constructor options to override the global client for that store only -- useful for testing:
 
 ```typescript
 const mockClient: HttpClient = {
