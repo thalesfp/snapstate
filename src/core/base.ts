@@ -126,8 +126,18 @@ export class SnapStore<T extends object, K extends string = string> {
       return () => generations.get(key) !== gen;
     };
 
+    const swallowIfHandled = async (params: { onError?: (error: Error) => void }, fn: () => Promise<void>): Promise<void> => {
+      try {
+        await fn();
+      } catch (e) {
+        if (!params.onError) {
+          throw e;
+        }
+      }
+    };
+
     const doSend = async (method: string, params: SendParams<K>): Promise<void> => {
-      await runOrTrack(params.key, async () => {
+      await swallowIfHandled(params, () => runOrTrack(params.key, async () => {
         try {
           const data = await resolveClient().request(params.url, {
             method,
@@ -143,11 +153,11 @@ export class SnapStore<T extends object, K extends string = string> {
           params.onError?.(e instanceof Error ? e : new Error("Unknown error"));
           throw e;
         }
-      });
+      }));
     };
 
     const doGet = async (params: SendParams<K>): Promise<void> => {
-      await runOrTrack(params.key, async () => {
+      await swallowIfHandled(params, () => runOrTrack(params.key, async () => {
         const stale = captureGen(params.key);
         try {
           const data = await resolveClient().request(params.url, {
@@ -166,7 +176,7 @@ export class SnapStore<T extends object, K extends string = string> {
           }
           throw e;
         }
-      });
+      }));
     };
 
     this.state = {
@@ -253,7 +263,7 @@ export class SnapStore<T extends object, K extends string = string> {
         await runOrTrack(params.key, params.fn);
       },
       all: async (params: { key?: K; requests: Array<{ url: string; target: string; headers?: Record<string, string> }>; onError?: (error: Error) => void }) => {
-        await runOrTrack(params.key, async () => {
+        await swallowIfHandled(params, () => runOrTrack(params.key, async () => {
           const stale = captureGen(params.key);
           try {
             const results = await Promise.all(
@@ -275,7 +285,7 @@ export class SnapStore<T extends object, K extends string = string> {
             }
             throw e;
           }
-        });
+        }));
       },
       get: (params: SendParams<K>) => doGet(params),
       post: (params: SendParams<K>) => doSend("POST", params),

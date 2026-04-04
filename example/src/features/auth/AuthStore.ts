@@ -44,20 +44,21 @@ export class AuthStore extends SnapStore<AuthState, AuthOp> {
     this.state.reset();
   }
 
-  async restore() {
+  restore() {
     const token = localStorage.getItem(TOKEN_KEY);
-    
+
     if (!token) {
       return;
     }
 
     this.state.set("token", token);
 
-    try {
-      await this.api.get({ key: "restore", url: "/api/auth/me", target: "user" });
-    } catch {
-      this.logout();
-    }
+    this.api.get({
+      key: "restore",
+      url: "/api/auth/me",
+      target: "user",
+      onError: () => this.logout(),
+    });
   }
 
   setUser(user: User) {

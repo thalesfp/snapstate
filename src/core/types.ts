@@ -262,12 +262,12 @@ export interface ApiAccessor<K extends string, T extends object = object> {
    * Perform a GET request and store the result at a state path.
    * @example await this.api.get({ url: "/api/todos", target: "todos" })
    */
-  get<P extends DotPaths<T>>(params: { key?: K; url: string; target: P }): Promise<void>;
+  get<P extends DotPaths<T>>(params: { key?: K; url: string; target: P; onError?: (error: Error) => void }): Promise<void>;
   /**
    * Perform a GET request with a callback.
    * @example await this.api.get({ key: "fetch", url: "/api/todos", onSuccess: (data) => ... })
    */
-  get<R = unknown>(params: { key?: K; url: string; onSuccess?: (data: R) => void }): Promise<void>;
+  get<R = unknown>(params: { key?: K; url: string; onSuccess?: (data: R) => void; onError?: (error: Error) => void }): Promise<void>;
   /** @example await this.api.post({ url: "/api/todos", body: { title: "New" }, target: "currentTodo" }) */
   post<P extends DotPaths<T>>(params: ApiTargetParams<K, P>): Promise<void>;
   /** @example await this.api.post({ key: "create", url: "/api/todos", body: { title: "New" } }) */
