@@ -8,18 +8,52 @@ State management for React. Class-based stores that are easy to test, easy to ex
 npm install @thalesfp/snapstate
 ```
 
+## When To Use Snapstate
+
+Snapstate exists to keep business logic out of React components. React components should focus on rendering and UI interactions, not application rules. Overusing `useEffect` and `useState` often leads to logic that is difficult to test, difficult to extend, and hard to reason about. By moving business logic into explicit stores, the UI stays simpler, the logic becomes easier to test, and the application remains less coupled to React itself.
+
+- Use it when you want testable store classes with minimal React coupling.
+- Use it when shared state, loading states, and view lifecycle need to stay predictable.
+- Use something smaller when local component state and a few hooks are enough.
+
 ## Entry Points
 
-| Import | Description |
-|---|---|
-| `@thalesfp/snapstate` | Core `SnapStore`, types, `setHttpClient` |
-| `@thalesfp/snapstate/react` | `SnapStore` with `connect()` HOC |
-| `@thalesfp/snapstate/form` | `SnapFormStore` with Zod validation and form lifecycle |
-| `@thalesfp/snapstate/url` | `createUrlParams`, `syncToUrl` for URL search params |
+| Import | Description | Requires |
+|---|---|---|
+| `@thalesfp/snapstate` | Core `SnapStore`, types, `setHttpClient` | None |
+| `@thalesfp/snapstate/react` | `SnapStore` with `connect()` HOC | `react` |
+| `@thalesfp/snapstate/form` | `SnapFormStore` with Zod validation and form lifecycle | `react`, `zod` |
+| `@thalesfp/snapstate/url` | `createUrlParams`, `syncToUrl` for URL search params | None |
 
 React and Zod are optional peer dependencies — only needed if you use their respective entry points. `qs` is bundled and requires no separate install.
 
+## Choose The Right API
+
+- Use `connect()` when you want simple store-to-props mapping for a shared store instance.
+- Use `select` when a component should subscribe to specific state paths instead of the whole mapped snapshot.
+- Use `SnapStore.scoped()` when each mounted view should get a fresh store instance.
+- Use `SnapFormStore` when the main concern is form values, validation, and submit lifecycle.
+- Use `createUrlParams` and `syncToUrl` when URL state should participate in the same store model.
+
+## Table Of Contents
+
+- [When To Use Snapstate](#when-to-use-snapstate)
+- [Entry Points](#entry-points)
+- [Choose The Right API](#choose-the-right-api)
+- [Quick Start](#quick-start)
+- [Stores](#stores)
+- [React Integration](#react-integration)
+- [Forms](#forms)
+- [URL Parameters](#url-parameters)
+- [Custom HTTP Client](#custom-http-client)
+- [Example App](#example-app)
+- [Docs](#docs)
+- [Benchmarks](#benchmarks)
+- [License](#license)
+
 ## Quick Start
+
+### 1. Define a store
 
 ```ts
 import { SnapStore } from "@thalesfp/snapstate/react";
@@ -52,6 +86,8 @@ class TodoStore extends SnapStore<State, "load"> {
 
 export const todoStore = new TodoStore();
 ```
+
+### 2. Connect it to React
 
 ```tsx
 function TodoListView({ todos }: { todos: State["todos"] }) {
@@ -136,7 +172,9 @@ Call `.destroy()` to stop tracking if you need to tear it down early; otherwise 
 
 ### Async operations (`this.api.*`)
 
-All methods take a single params object. When `key` is provided, the operation is tracked via `getStatus(key)` with take-latest semantics. When `key` is omitted, the request runs without status tracking.
+Tracked async operations use take-latest semantics by key: if a newer request starts for the same key, the older one stops updating status and state.
+
+All methods take a single params object. When `key` is provided, the operation is tracked via `getStatus(key)`. When `key` is omitted, the request runs without status tracking.
 
 | Method | Description |
 |---|---|
@@ -561,13 +599,23 @@ const store = new UserStore({ httpClient: mockClient });
 
 ## Example App
 
-A full Vite + React 19 demo lives in [`example/`](./example/) with todos, auth, and account profile features.
+A full Vite + React 19 demo lives in [`example/`](./example/) and shows shared stores, scoped detail views, form submission, auth state, and URL-backed todo filters.
 
 ```bash
-npm run build                  # Build library first
-cd example && npm install      # Install example deps (first time)
-cd .. && npm run example:dev   # Start dev server + mock API
+npm run build            # Build the library used by the example
+npm run example:install  # Install example deps (first time)
+npm run example:dev      # Start the Vite app and mock API together
 ```
+
+## Docs
+
+- [Getting Started](./docs/README.md)
+- [Core Concepts](./docs/core-concepts.md)
+- [Store API](./docs/store-api.md)
+- [React Integration](./docs/react-integration.md)
+- [Async & HTTP](./docs/async-http.md)
+- [Forms](./docs/forms.md)
+- [Advanced Topics](./docs/advanced.md)
 
 ## Benchmarks
 
