@@ -56,7 +56,6 @@
     }
   },
   "devDependencies": {
-    "@swc/core": "^1.15.21",
     "@testing-library/react": "^16.0.0",
     "@types/qs": "^6.15.0",
     "@types/react": "^18.3.0",
@@ -66,7 +65,6 @@
     "react-dom": "^18.3.0",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",
-    "unplugin-swc": "^1.5.9",
     "vitest": "^4.1.2",
     "zod": "^4.3.6"
   },
