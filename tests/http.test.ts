@@ -363,6 +363,190 @@ describe("api.all", () => {
 
     expect(mockClient.request).toHaveBeenCalledWith("/api/users", { method: "GET", headers: { "X-Custom": "value" } });
   });
+
+  it("calls per-request onError and continues when individual request fails", async () => {
+    const perReqError = vi.fn();
+    mockClient.request
+      .mockRejectedValueOnce(new Error("fail"))
+      .mockResolvedValueOnce({ count: 42 });
+
+    await store.api.all({ key: "fetch", requests: [
+      { url: "/api/users", target: "users", onError: perReqError },
+      { url: "/api/stats", target: "stats" },
+    ]});
+
+    expect(perReqError).toHaveBeenCalledWith(expect.objectContaining({ message: "fail" }));
+    expect(store.snapshot().stats).toEqual({ count: 42 });
+    expect(store.snapshot().users).toEqual([]);
+    expect(store.getStatus("fetch").status.isReady).toBe(true);
+  });
+
+  it("supports non-GET methods in requests", async () => {
+    mockClient.request.mockResolvedValue({ count: 1 });
+
+    await store.api.all({ requests: [
+      { url: "/api/stats", target: "stats", method: "POST", body: { query: "active" } },
+    ]});
+
+    expect(mockClient.request).toHaveBeenCalledWith("/api/stats", {
+      method: "POST",
+      body: { query: "active" },
+      headers: undefined,
+    });
+    expect(store.snapshot().stats).toEqual({ count: 1 });
+  });
+});
+
+describe("api.get fallback", () => {
+  interface State {
+    items: string[];
+    name: string;
+  }
+
+  let mockClient: { request: ReturnType<typeof vi.fn> };
+  let store: SnapStore<State, "op">;
+
+  beforeEach(() => {
+    mockClient = { request: vi.fn() };
+    store = new (class extends SnapStore<State, "op"> {})(
+      { items: [], name: "" },
+      { httpClient: mockClient },
+    );
+  });
+
+  it("sets target to fallback value on error and does not rethrow", async () => {
+    mockClient.request.mockRejectedValue(new Error("fail"));
+
+    await store.api.get({ key: "op", url: "/api/items", target: "items", fallback: ["default"] });
+
+    expect(store.getSnapshot().items).toEqual(["default"]);
+    expect(store.getStatus("op").status.isError).toBe(true);
+  });
+
+  it("uses response data when request succeeds (ignores fallback)", async () => {
+    mockClient.request.mockResolvedValue(["real"]);
+
+    await store.api.get({ key: "op", url: "/api/items", target: "items", fallback: ["default"] });
+
+    expect(store.getSnapshot().items).toEqual(["real"]);
+  });
+
+  it("calls onError alongside fallback", async () => {
+    const onError = vi.fn();
+    mockClient.request.mockRejectedValue(new Error("fail"));
+
+    await store.api.get({ key: "op", url: "/api/items", target: "items", fallback: [], onError });
+
+    expect(store.getSnapshot().items).toEqual([]);
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "fail" }));
+  });
+});
+
+describe("api.fetch returns value", () => {
+  let mockClient: { request: ReturnType<typeof vi.fn> };
+  let store: SnapStore<{ data: string }, "op">;
+
+  beforeEach(() => {
+    mockClient = { request: vi.fn() };
+    store = new (class extends SnapStore<{ data: string }, "op"> {})(
+      { data: "" },
+      { httpClient: mockClient },
+    );
+  });
+
+  it("returns the value from fn", async () => {
+    const result = await store.api.fetch({ key: "op", fn: async () => 42 });
+
+    expect(result).toBe(42);
+    expect(store.getStatus("op").status.isReady).toBe(true);
+  });
+
+  it("returns value without key", async () => {
+    const result = await store.api.fetch({ fn: async () => "hello" });
+
+    expect(result).toBe("hello");
+  });
+});
+
+describe("onError rethrowing", () => {
+  let mockClient: { request: ReturnType<typeof vi.fn> };
+  let store: SnapStore<{ data: string }, "op">;
+
+  beforeEach(() => {
+    mockClient = { request: vi.fn() };
+    store = new (class extends SnapStore<{ data: string }, "op"> {})(
+      { data: "" },
+      { httpClient: mockClient },
+    );
+  });
+
+  it("propagates error when onError throws (api.get)", async () => {
+    mockClient.request.mockRejectedValue(new Error("network"));
+
+    await expect(store.api.get({
+      key: "op",
+      url: "/api/data",
+      target: "data",
+      onError: () => { throw new Error("rethrown"); },
+    })).rejects.toThrow("rethrown");
+  });
+
+  it("propagates error when onError throws (api.post)", async () => {
+    mockClient.request.mockRejectedValue(new Error("network"));
+
+    await expect(store.api.post({
+      key: "op",
+      url: "/api/data",
+      onError: () => { throw new Error("rethrown"); },
+    })).rejects.toThrow("rethrown");
+  });
+
+  it("still swallows when onError does not throw", async () => {
+    const onError = vi.fn();
+    mockClient.request.mockRejectedValue(new Error("network"));
+
+    await store.api.get({ key: "op", url: "/api/data", target: "data", onError });
+
+    expect(onError).toHaveBeenCalled();
+  });
+});
+
+describe("setDefaultHeaders with custom client", () => {
+  afterEach(() => {
+    setDefaultHeaders({});
+  });
+
+  it("merges default headers into custom client requests", async () => {
+    const customClient: HttpClient = { request: vi.fn().mockResolvedValue("ok") };
+    setDefaultHeaders({ Authorization: "Bearer token" });
+
+    const store = new (class extends SnapStore<{ data: string }, "op"> {})(
+      { data: "" },
+      { httpClient: customClient },
+    );
+    await store.api.get({ url: "/api/data", target: "data" });
+
+    expect(customClient.request).toHaveBeenCalledWith("/api/data", {
+      method: "GET",
+      headers: { Authorization: "Bearer token" },
+    });
+  });
+
+  it("per-request headers override default headers with custom client", async () => {
+    const customClient: HttpClient = { request: vi.fn().mockResolvedValue("ok") };
+    setDefaultHeaders({ Authorization: "Bearer default" });
+
+    const store = new (class extends SnapStore<{ data: string }, "op"> {})(
+      { data: "" },
+      { httpClient: customClient },
+    );
+    await store.api.get({ url: "/api/data", target: "data", headers: { Authorization: "Bearer override" } });
+
+    expect(customClient.request).toHaveBeenCalledWith("/api/data", {
+      method: "GET",
+      headers: { Authorization: "Bearer override" },
+    });
+  });
 });
 
 describe("take-latest guards state mutations", () => {

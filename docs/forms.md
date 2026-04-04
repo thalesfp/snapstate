@@ -108,15 +108,12 @@ form.isFieldDirty("name");   // specific field dirty?
 
 ## Submission
 
-`submit(key, handler)` validates first, then runs the handler:
+`submit(key, handler)` validates first, then runs the handler. Use `this.http` for HTTP calls inside the handler -- `this.api.*` methods cause double status tracking on the same key:
 
 ```typescript
 async save() {
   await this.submit("save", async (values) => {
-    const response = await fetch("/api/save", {
-      method: "POST",
-      body: JSON.stringify(values),
-    });
+    await this.http.request("/api/save", { method: "POST", body: values });
   });
 }
 ```

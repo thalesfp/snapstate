@@ -10,6 +10,7 @@ import type {
   Subscribable,
   DotPaths,
   GetByPath,
+  HttpMethod,
 } from "./types.js";
 import { asyncStatus } from "./types.js";
 import { createStore } from "./store.js";
@@ -25,6 +26,7 @@ interface SendParams<K> {
 }
 
 const IDLE_STATE: OperationState = { status: asyncStatus("idle"), error: null };
+const HANDLED = Symbol("handled");
 
 const defaultHttpClient: HttpClient = {
   async request(url, init) {
@@ -91,17 +93,19 @@ export class SnapStore<T extends object, K extends string = string> {
 
     // takeLatest semantic: if a newer call starts for the same key, the older
     // call's promise resolves silently (no reject, no state update).
-    const doTracked = async (key: K, fn: () => Promise<void>): Promise<void> => {
+    const doTracked = async <R>(key: K, fn: () => Promise<R>): Promise<R | undefined> => {
       const gen = (generations.get(key) ?? 0) + 1;
       generations.set(key, gen);
       operations.set(key, { status: asyncStatus("loading"), error: null });
       store.notify();
       try {
-        await fn();
-        if (generations.get(key) !== gen) { return; }
+        const result = await fn();
+        if (generations.get(key) !== gen) { return undefined; }
         operations.set(key, { status: asyncStatus("ready"), error: null });
+        store.notify();
+        return result;
       } catch (e) {
-        if (generations.get(key) !== gen) { return; }
+        if (generations.get(key) !== gen) { return undefined; }
         operations.set(key, {
           status: asyncStatus("error"),
           error: e instanceof Error ? e.message : "Unknown error",
@@ -109,15 +113,13 @@ export class SnapStore<T extends object, K extends string = string> {
         store.notify();
         throw e;
       }
-      store.notify();
     };
 
-    const runOrTrack = async (key: K | undefined, fn: () => Promise<void>): Promise<void> => {
+    const runOrTrack = async <R>(key: K | undefined, fn: () => Promise<R>): Promise<R | undefined> => {
       if (key !== undefined) {
-        await doTracked(key, fn);
-      } else {
-        await fn();
+        return doTracked(key, fn);
       }
+      return fn();
     };
 
     const captureGen = (key: K | undefined): (() => boolean) => {
@@ -126,23 +128,40 @@ export class SnapStore<T extends object, K extends string = string> {
       return () => generations.get(key) !== gen;
     };
 
-    const swallowIfHandled = async (params: { onError?: (error: Error) => void }, fn: () => Promise<void>): Promise<void> => {
+    const mergeHeaders = (headers?: Record<string, string>): Record<string, string> | undefined => {
+      const merged = { ...defaultHeaders, ...headers };
+      return Object.keys(merged).length ? merged : undefined;
+    };
+
+    const callOnError = (onError: ((error: Error) => void) | undefined, e: unknown, rethrown?: WeakSet<object>): void => {
+      if (!onError) { return; }
       try {
-        await fn();
-      } catch (e) {
-        if (!params.onError) {
-          throw e;
+        onError(e instanceof Error ? e : new Error("Unknown error"));
+      } catch (userError) {
+        if (rethrown && typeof userError === "object" && userError !== null) {
+          rethrown.add(userError);
         }
+        throw userError;
+      }
+    };
+
+    const swallowIfHandled = async (params: { onError?: (error: Error) => void; suppress?: boolean }, fn: (rethrown: WeakSet<object>) => Promise<void>): Promise<void> => {
+      const rethrown = new WeakSet<object>();
+      try {
+        await fn(rethrown);
+      } catch (e) {
+        if (typeof e === "object" && e !== null && rethrown.has(e)) { throw e; }
+        if (!params.onError && !params.suppress) { throw e; }
       }
     };
 
     const doSend = async (method: string, params: SendParams<K>): Promise<void> => {
-      await swallowIfHandled(params, () => runOrTrack(params.key, async () => {
+      await swallowIfHandled(params, (rethrown) => runOrTrack(params.key, async () => {
         try {
           const data = await resolveClient().request(params.url, {
             method,
             body: params.body,
-            headers: params.headers,
+            headers: mergeHeaders(params.headers),
           });
           if (typeof params.target === "string") {
             store.set(params.target as never, data as never);
@@ -150,19 +169,20 @@ export class SnapStore<T extends object, K extends string = string> {
             params.onSuccess?.(data);
           }
         } catch (e) {
-          params.onError?.(e instanceof Error ? e : new Error("Unknown error"));
+          callOnError(params.onError, e, rethrown);
           throw e;
         }
       }));
     };
 
-    const doGet = async (params: SendParams<K>): Promise<void> => {
-      await swallowIfHandled(params, () => runOrTrack(params.key, async () => {
+    const doGet = async (params: SendParams<K> & { fallback?: unknown }): Promise<void> => {
+      const hasFallback = "fallback" in params;
+      await swallowIfHandled({ ...params, suppress: hasFallback }, (rethrown) => runOrTrack(params.key, async () => {
         const stale = captureGen(params.key);
         try {
           const data = await resolveClient().request(params.url, {
             method: "GET",
-            headers: params.headers,
+            headers: mergeHeaders(params.headers),
           });
           if (stale()) { return; }
           if (typeof params.target === "string") {
@@ -171,9 +191,11 @@ export class SnapStore<T extends object, K extends string = string> {
             params.onSuccess?.(data);
           }
         } catch (e) {
-          if (!stale()) {
-            params.onError?.(e instanceof Error ? e : new Error("Unknown error"));
+          if (stale()) { return; }
+          if ("fallback" in params && typeof params.target === "string") {
+            store.set(params.target as never, params.fallback as never);
           }
+          callOnError(params.onError, e, rethrown);
           throw e;
         }
       }));
@@ -259,35 +281,50 @@ export class SnapStore<T extends object, K extends string = string> {
     };
 
     this.api = {
-      fetch: async (params: { key?: K; fn: () => Promise<void> }): Promise<void> => {
-        await runOrTrack(params.key, params.fn);
+      fetch: async <R>(params: { key?: K; fn: () => Promise<R> }): Promise<R | undefined> => {
+        return runOrTrack(params.key, params.fn);
       },
-      all: async (params: { key?: K; requests: Array<{ url: string; target: string; headers?: Record<string, string> }>; onError?: (error: Error) => void }) => {
-        await swallowIfHandled(params, () => runOrTrack(params.key, async () => {
+      all: async (params: { key?: K; requests: Array<{ url: string; target: string; method?: HttpMethod; body?: unknown; headers?: Record<string, string>; onError?: (error: Error) => void }>; onError?: (error: Error) => void }) => {
+        await swallowIfHandled(params, (rethrown) => runOrTrack(params.key, async () => {
           const stale = captureGen(params.key);
+          let batchFailed = false;
           try {
             const results = await Promise.all(
-              params.requests.map((req) => resolveClient().request(req.url, {
-                method: "GET",
-                headers: req.headers,
-              }))
+              params.requests.map(async (req) => {
+                try {
+                  return await resolveClient().request(req.url, {
+                    method: req.method ?? "GET",
+                    body: req.body,
+                    headers: mergeHeaders(req.headers),
+                  });
+                } catch (e) {
+                  if (req.onError && !stale() && !batchFailed) {
+                    callOnError(req.onError, e);
+                    return HANDLED;
+                  }
+                  if (req.onError) { return HANDLED; }
+                  throw e;
+                }
+              })
             );
 
             if (stale()) { return; }
             store.batch(() => {
               params.requests.forEach((req, i) => {
-                store.set(req.target as never, results[i] as never);
+                if (results[i] !== HANDLED) {
+                  store.set(req.target as never, results[i] as never);
+                }
               });
             });
           } catch (e) {
-            if (!stale()) {
-              params.onError?.(e instanceof Error ? e : new Error("Unknown error"));
-            }
+            batchFailed = true;
+            if (stale()) { return; }
+            callOnError(params.onError, e, rethrown);
             throw e;
           }
         }));
       },
-      get: (params: SendParams<K>) => doGet(params),
+      get: (params: SendParams<K> & { fallback?: unknown }) => doGet(params),
       post: (params: SendParams<K>) => doSend("POST", params),
       put: (params: SendParams<K>) => doSend("PUT", params),
       patch: (params: SendParams<K>) => doSend("PATCH", params),

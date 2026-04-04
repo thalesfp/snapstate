@@ -178,13 +178,13 @@ All methods take a single params object. When `key` is provided, the operation i
 
 | Method | Description |
 |---|---|
-| `fetch({ key?, fn })` | Run async function, optionally tracked |
-| `all({ key?, requests })` | Parallel GETs, each stored at a target path |
-| `get({ key?, url, target?, onSuccess?, onError? })` | GET request |
+| `fetch({ key?, fn })` | Run async function, optionally tracked. Returns the value from `fn`. |
+| `all({ key?, requests })` | Parallel requests, each stored at a target path |
+| `get({ key?, url, target?, fallback?, onSuccess?, onError? })` | GET request |
 | `post({ key?, url, body?, target?, onSuccess?, onError? })` | POST request |
 | `put` / `patch` / `delete` | Same params as `post` |
 
-Pass `target` to store the response directly at a state path, or `onSuccess` for custom handling. The two are mutually exclusive; `target` takes precedence. When `onError` is provided, the error is handled and does not propagate to the caller. Without `onError`, errors are rethrown.
+Pass `target` to store the response directly at a state path, or `onSuccess` for custom handling. The two are mutually exclusive; `target` takes precedence. Pass `fallback` with `target` on `get` to set a default value on error (suppresses the error). When `onError` is provided, the error is handled and does not propagate to the caller -- unless `onError` itself throws, in which case the thrown error propagates. Without `onError`, errors are rethrown.
 
 **Status tracking:** `getStatus(key)` returns `{ status, error }` where `status` has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`. Call `resetStatus(key)` to return a single operation to `idle`, or `resetStatus()` with no arguments to reset all operations at once.
 
@@ -198,13 +198,26 @@ store.resetStatus();
 
 #### Parallel requests (`api.all`)
 
-Load multiple endpoints in parallel under a single tracked operation. Each request stores its response at the specified `target` path:
+Load multiple endpoints in parallel under a single tracked operation. Each request stores its response at the specified `target` path. Requests default to GET but support any HTTP method:
 
 ```typescript
 async fetchDashboard() {
   await this.api.all({ key: "dashboard", requests: [
     { url: "/api/todos", target: "todos" },
     { url: "/api/stats", target: "stats" },
+    { url: "/api/search", target: "results", method: "POST", body: { query: "active" } },
+  ]});
+}
+```
+
+Individual requests can have their own `onError` for per-request fallbacks. Requests with `onError` don't fail the batch:
+
+```typescript
+async loadSettings() {
+  await this.api.all({ key: "settings", requests: [
+    { url: "/api/teams", target: "teams" },
+    { url: "/api/credentials", target: "credStatus" },
+    { url: "/api/linear-teams", target: "linearTeams", onError: () => this.state.set("linearTeams", []) },
   ]});
 }
 ```
@@ -213,18 +226,14 @@ Targets are type-safe: each must be a valid state path.
 
 #### Raw HTTP access (`this.http`)
 
-For cases `api.all` doesn't cover (non-GET requests, custom response handling), use `this.http` inside `api.fetch` to make HTTP calls through the store's configured client without creating a separate tracked operation:
+Use `this.http` inside `api.fetch` to make HTTP calls through the store's configured client without creating a separate tracked operation. `api.fetch` returns the value from `fn`:
 
 ```typescript
-async fetchDashboard() {
-  await this.api.fetch({ key: "dashboard", fn: async () => {
-    const [todos, stats] = await Promise.all([
-      this.http.request<Todo[]>("/api/todos"),
-      this.http.request<Stats>("/api/stats"),
-    ]);
-
-    this.state.merge({ todos, stats });
-  }});
+async refreshOrgCount(phaseId: string): Promise<number> {
+  const { count } = await this.api.fetch({ key: "refreshOrgCount", fn: async () =>
+    this.http.request<{ count: number }>(`/api/phases/${phaseId}/org-count`)
+  });
+  return count;
 }
 ```
 
@@ -467,7 +476,7 @@ export const LoginForm = loginStore.connect(LoginFormView, (s) => ({
 | `getValues()` | Get all current values |
 | `validate()` | Validate full form, returns parsed data or `null` |
 | `validateField(field)` | Validate single field |
-| `submit(key, handler)` | Validate then call handler with async status tracking |
+| `submit(key, handler)` | Validate then call handler with async status tracking. Use `this.http` for HTTP calls inside the handler -- `api.*` methods cause double status tracking. |
 | `reset()` | Reset to initial values |
 | `clear()` | Clear to type-appropriate zero values |
 | `setInitialValues(values)` | Update initial values |
@@ -568,7 +577,7 @@ unsub();              // Stop syncing to URL (return value of syncToUrl)
 
 ## Custom HTTP Client
 
-By default, snapstate uses the native `fetch` API, sets no auth headers, and throws on non-2xx responses. Override it globally with `setHttpClient`, or per-store via constructor options.
+By default, snapstate uses the native `fetch` API, sets no auth headers, and throws on non-2xx responses. Override it globally with `setHttpClient`, or per-store via constructor options. `setDefaultHeaders` works with both the default and custom clients -- headers are merged at the API method level before reaching the client.
 
 ```ts
 import { setHttpClient } from "@thalesfp/snapstate";

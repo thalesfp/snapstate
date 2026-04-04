@@ -33,30 +33,27 @@ export class AccountStore extends SnapFormStore<ProfileValues, "update"> {
   }
 
   updateProfile() {
-    const data = this.validate();
-    if (!data) return;
-    this.syncSubmitStatus("update");
-    return this.api.patch<{ token: string; user: User }>({
-      key: "update",
-      url: "/api/account/profile",
-      body: data,
-      onSuccess: (result) => {
-        this.setInitialValues({
-          name: result.user.name,
-          email: result.user.email,
-          notifications: result.user.notifications,
-          theme: result.user.theme,
-        });
-        this.auth.setUser(result.user);
-        this.auth.setToken(result.token);
-        if (this.resetTimer) {
-          clearTimeout(this.resetTimer);
-        }
-        this.resetTimer = setTimeout(() => {
-          this.resetTimer = null;
-          this.resetStatus("update");
-        }, 2000);
-      },
+    return this.submit("update", async (values) => {
+      const result = await this.http.request<{ token: string; user: User }>("/api/account/profile", {
+        method: "PATCH",
+        body: values,
+      });
+      this.setInitialValues({
+        name: result.user.name,
+        email: result.user.email,
+        notifications: result.user.notifications,
+        theme: result.user.theme,
+      });
+      this.auth.setUser(result.user);
+      this.auth.setToken(result.token);
+
+      if (this.resetTimer) {
+        clearTimeout(this.resetTimer);
+      }
+      this.resetTimer = setTimeout(() => {
+        this.resetTimer = null;
+        this.resetStatus("update");
+      }, 2000);
     });
   }
 }

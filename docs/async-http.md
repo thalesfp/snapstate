@@ -26,9 +26,9 @@ type OperationState = {
 };
 ```
 
-## api.fetch(key, asyncFn)
+## api.fetch({ key?, fn })
 
-Run any async function with status tracking:
+Run any async function with status tracking. Returns the value from `fn`:
 
 ```typescript
 class UserStore extends SnapStore<{ user: User | null }, "loadUser"> {
@@ -37,11 +37,18 @@ class UserStore extends SnapStore<{ user: User | null }, "loadUser"> {
   }
 
   async loadUser(id: string) {
-    await this.api.fetch("loadUser", async () => {
+    await this.api.fetch({ key: "loadUser", fn: async () => {
       const res = await fetch(`/api/users/${id}`);
       const user = await res.json();
       this.state.set("user", user);
+    }});
+  }
+
+  async getCount(): Promise<number> {
+    const { count } = await this.api.fetch({ key: "count", fn: () =>
+      this.http.request<{ count: number }>("/api/count")
     });
+    return count;
   }
 }
 ```
@@ -84,7 +91,7 @@ All HTTP methods accept `ApiRequestOptions`:
 | `body` | Request body (JSON-serialized automatically) |
 | `headers` | Per-request headers (merged with defaults) |
 | `onSuccess` | Callback with the parsed response |
-| `onError` | Callback with the error |
+| `onError` | Callback with the error. If `onError` throws, the error propagates to the caller. |
 
 ## TakeLatest Semantics
 
@@ -141,4 +148,4 @@ setDefaultHeaders({
 });
 ```
 
-Per-request headers override defaults. Call `setDefaultHeaders({})` to clear.
+Per-request headers override defaults. Call `setDefaultHeaders({})` to clear. Default headers work with both the built-in client and custom clients set via `setHttpClient`.

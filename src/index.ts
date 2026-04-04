@@ -9,4 +9,5 @@ export type {
   Unsubscribe,
   ComputedRef,
   HttpClient,
+  HttpMethod,
 } from "./core/types.js";

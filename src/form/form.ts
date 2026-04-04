@@ -528,7 +528,8 @@ export class SnapFormStore<
   /**
    * Validate and submit the form. Returns `undefined` if validation fails.
    * Status is tracked under `key` and reflected in `submitStatus`.
-   * @example await form.submit("save", values => api.post("/users", { body: values }))
+   * Use `this.http` for HTTP calls inside the handler -- using `this.api.*` causes double status tracking.
+   * @example await form.submit("save", values => this.http.request("/users", { method: "POST", body: values }))
    */
   submit(
     key: K,

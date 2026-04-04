@@ -19,22 +19,13 @@ export class LoginFormStore extends SnapFormStore<LoginValues, "login"> {
   }
 
   login() {
-    const data = this.validate();
-    
-    if (!data) {
-      return;
-    }
-    
-    this.syncSubmitStatus("login");
-
-    return this.api.post<{ token: string; user: User }>({
-      key: "login",
-      url: "/api/auth/login",
-      body: data,
-      onSuccess: (result) => {
-        this.auth.setUser(result.user);
-        this.auth.setToken(result.token);
-      },
+    return this.submit("login", async (values) => {
+      const result = await this.http.request<{ token: string; user: User }>("/api/auth/login", {
+        method: "POST",
+        body: values,
+      });
+      this.auth.setUser(result.user);
+      this.auth.setToken(result.token);
     });
   }
 }

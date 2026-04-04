@@ -236,22 +236,27 @@ export type ApiTargetParams<K extends string, P extends string> = ApiBaseParams<
 /** Verb params with an optional success callback. */
 export type ApiCallbackParams<K extends string, R = unknown> = ApiBaseParams<K> & { onSuccess?: (data: R) => void };
 
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
 /** A single request entry for `api.all`. Each target is independently validated as a valid state path. */
 export type AllRequest<T extends object> = {
-  [P in DotPaths<T>]: { url: string; target: P; headers?: Record<string, string> };
+  [P in DotPaths<T>]: { url: string; target: P; method?: HttpMethod; body?: unknown; headers?: Record<string, string>; onError?: (error: Error) => void };
 }[DotPaths<T>];
 
 /** Methods for async operations with automatic status tracking. Accessed via `this.api` inside a `SnapStore` subclass. */
 export interface ApiAccessor<K extends string, T extends object = object> {
   /**
    * Wrap an async operation with automatic status tracking. When `key` is omitted, no status is tracked.
-   * @example await this.api.fetch({ key: "todos", fn: async () => { ... } })
-   * @example await this.api.fetch({ fn: async () => { ... } })
+   * Returns the value from `fn`. When `key` is provided and a newer call supersedes this one
+   * (take-latest), the stale call resolves with `undefined`.
+   * @example const data = await this.api.fetch({ key: "todos", fn: async () => fetchItems() })
    */
-  fetch(params: { key?: K; fn: () => Promise<void> }): Promise<void>;
+  fetch<R = void>(params: { key: K; fn: () => Promise<R> }): Promise<R | undefined>;
+  fetch<R = void>(params: { fn: () => Promise<R> }): Promise<R>;
   /**
-   * Run multiple GET requests in parallel under a single tracked operation.
+   * Run multiple requests in parallel under a single tracked operation.
    * Each request stores its result at the specified `target` path.
+   * Individual requests can have their own `onError` for per-request fallbacks.
    * @example await this.api.all({ key: "dashboard", requests: [
    *   { url: "/api/todos", target: "todos" },
    *   { url: "/api/stats", target: "stats" },
@@ -260,9 +265,10 @@ export interface ApiAccessor<K extends string, T extends object = object> {
   all(params: { key?: K; requests: AllRequest<T>[]; onError?: (error: Error) => void }): Promise<void>;
   /**
    * Perform a GET request and store the result at a state path.
-   * @example await this.api.get({ url: "/api/todos", target: "todos" })
+   * Pass `fallback` to set the target to a default value on error (suppresses the error).
+   * @example await this.api.get({ url: "/api/todos", target: "todos", fallback: [] })
    */
-  get<P extends DotPaths<T>>(params: { key?: K; url: string; target: P; onError?: (error: Error) => void }): Promise<void>;
+  get<P extends DotPaths<T>>(params: { key?: K; url: string; target: P; fallback?: GetByPath<T, P>; onError?: (error: Error) => void }): Promise<void>;
   /**
    * Perform a GET request with a callback.
    * @example await this.api.get({ key: "fetch", url: "/api/todos", onSuccess: (data) => ... })
