@@ -115,13 +115,13 @@ All methods take a single params object. When `key` is provided, the operation i
 |---|---|
 | `fetch({ key?, fn })` | Run async function, optionally tracked |
 | `all({ key?, requests })` | Parallel GETs, each stored at a target path |
-| `get({ key?, url, target })` | GET and store result at state path |
-| `get({ key?, url, onSuccess? })` | GET with callback |
+| `get({ key?, url, target, onError? })` | GET and store result at state path |
+| `get({ key?, url, onSuccess?, onError? })` | GET with callback |
 | `post({ key?, url, body?, target })` | POST and store result at state path |
 | `post({ key?, url, body?, onSuccess?, onError? })` | POST with callbacks |
 | `put/patch/delete` | Same params as `post` |
 
-Pass `target` to store the response directly at a state path, or `onSuccess` for custom handling. Both are optional.
+Pass `target` to store the response directly at a state path, or `onSuccess` for custom handling. Both are optional. When `onError` is provided, the error is handled and does not propagate to the caller. Without `onError`, errors are rethrown.
 
 **Status tracking:** `getStatus(key)` returns `{ status, error }` where `status` has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`. Call `resetStatus(key)` to return a single operation to `idle`, or `resetStatus()` with no arguments to reset all operations at once.
 

@@ -330,15 +330,16 @@ describe("api.all", () => {
     expect(store.getStatus("fetch").error).toBe("Server error");
   });
 
-  it("calls onError when a request fails", async () => {
+  it("calls onError when a request fails and does not rethrow", async () => {
     const onError = vi.fn();
     mockClient.request.mockRejectedValue(new Error("fail"));
 
-    await expect(store.api.all({ key: "fetch", requests: [
+    await store.api.all({ key: "fetch", requests: [
       { url: "/api/users", target: "users" },
-    ], onError })).rejects.toThrow("fail");
+    ], onError });
 
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "fail" }));
+    expect(store.getStatus("fetch").status.isError).toBe(true);
   });
 
   it("sends GET requests with correct URLs", async () => {
