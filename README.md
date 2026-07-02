@@ -52,8 +52,17 @@ export interface TodoState {
 }
 
 export class TodoStore extends SnapStore<TodoState, "load"> {
+  // Derived value: cached, recomputed only when "todos" changes
+  private remaining = this.state.computed(["todos"], (s) =>
+    s.todos.filter((t) => !t.done).length
+  );
+
   constructor(options?: StoreOptions) {
     super({ todos: [] }, options);
+  }
+
+  get remainingCount() {
+    return this.remaining.get();
   }
 
   loadTodos() {
@@ -104,18 +113,18 @@ export const TodoList = todoStore.connect(TodoListView, {
 });
 ```
 
-**`TodoCount.tsx`** shows why the store lives at module level: any other component connects to the same instance, with no prop drilling:
+**`TodoCount.tsx`** shows why the store lives at module level: any other component connects to the same instance, with no prop drilling. It reads the store's computed value through the `props` mapper, the form to use for derived values:
 
 ```tsx
-import { todoStore, type Todo } from "./TodoStore";
+import { todoStore } from "./TodoStore";
 
-function TodoCountView({ todos }: { todos: Todo[] }) {
-  return <p>{todos.filter((t) => !t.done).length} remaining</p>;
+function TodoCountView({ remaining }: { remaining: number }) {
+  return <p>{remaining} remaining</p>;
 }
 
-export const TodoCount = todoStore.connect(TodoCountView, {
-  select: ["todos"],
-});
+export const TodoCount = todoStore.connect(TodoCountView, (s) => ({
+  remaining: s.remainingCount,
+}));
 ```
 
 If only one component ever used this store, you would create it with [`SnapStore.scoped()`](#scoped-stores) instead; the [next section](#choosing-the-right-tool) covers how to choose.
@@ -176,6 +185,16 @@ describe("TodoStore", () => {
     expect(completed.done).toBe(true);
     expect(untouched.done).toBe(false);
   });
+
+  it("counts the remaining todos", () => {
+    const store = new TodoStore();
+    store.addTodo("Write docs");
+    store.addTodo("Ship it");
+
+    store.complete(store.getSnapshot().todos[0].id);
+
+    expect(store.remainingCount).toBe(1);
+  });
 });
 ```
 
@@ -217,7 +236,7 @@ describe("TodoListView", () => {
 });
 ```
 
-Read the test names top to bottom and you get the feature's use cases: load, fail, add, complete, render, click. Store use cases run without rendering; view use cases run without a store or network.
+Read the test names top to bottom and you get the feature's use cases: load, fail, add, complete, count, render, click. Store use cases run without rendering; view use cases run without a store or network.
 
 ## Choosing the Right Tool
 
