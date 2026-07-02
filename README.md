@@ -117,65 +117,102 @@ If only one component ever used this store, you would create it with [`SnapStore
 
 ### Testing the store
 
-Stores are plain classes, so store tests need no React at all. Inject a mock HTTP client through the constructor and call methods directly:
+Stores are plain classes, so store tests need no React at all. Each use case of the feature becomes one test: inject a mock HTTP client through the constructor, call the method, assert on state and status.
 
 **`TodoStore.test.ts`**
 
 ```ts
-import { expect, test, vi } from "vitest";
-import type { HttpClient } from "@thalesfp/snapstate";
+import { describe, expect, it, vi } from "vitest";
 import { TodoStore } from "./TodoStore";
 
-const todos = [{ id: "1", text: "Write docs", done: false }];
-const mockClient: HttpClient = { request: vi.fn().mockResolvedValue(todos) };
+describe("TodoStore", () => {
+  it("loads todos from the API and tracks the status", async () => {
+    const todos = [{ id: "1", text: "Write docs", done: false }];
+    const store = new TodoStore({
+      httpClient: { request: vi.fn().mockResolvedValue(todos) },
+    });
 
-test("loadTodos stores the response and tracks status", async () => {
-  const store = new TodoStore({ httpClient: mockClient });
+    await store.loadTodos();
 
-  await store.loadTodos();
+    expect(store.getSnapshot().todos).toEqual(todos);
+    expect(store.getStatus("load").status.isReady).toBe(true);
+  });
 
-  expect(store.getSnapshot().todos).toEqual(todos);
-  expect(store.getStatus("load").status.isReady).toBe(true);
-});
+  it("records the error when loading fails", async () => {
+    const store = new TodoStore({
+      httpClient: { request: vi.fn().mockRejectedValue(new Error("HTTP 500")) },
+    });
 
-test("complete marks the matching todo as done", () => {
-  const store = new TodoStore();
-  store.addTodo("Write docs");
-  const { id } = store.getSnapshot().todos[0];
+    await expect(store.loadTodos()).rejects.toThrow("HTTP 500");
 
-  store.complete(id);
+    expect(store.getStatus("load").status.isError).toBe(true);
+    expect(store.getStatus("load").error).toBe("HTTP 500");
+  });
 
-  expect(store.getSnapshot().todos[0].done).toBe(true);
+  it("adds a new todo as not done", () => {
+    const store = new TodoStore();
+
+    store.addTodo("Write docs");
+
+    const [todo] = store.getSnapshot().todos;
+    expect(todo.text).toBe("Write docs");
+    expect(todo.done).toBe(false);
+  });
+
+  it("completes only the matching todo", () => {
+    const store = new TodoStore();
+    store.addTodo("Write docs");
+    store.addTodo("Ship it");
+    const [first] = store.getSnapshot().todos;
+
+    store.complete(first.id);
+
+    const [completed, untouched] = store.getSnapshot().todos;
+    expect(completed.done).toBe(true);
+    expect(untouched.done).toBe(false);
+  });
 });
 ```
 
 ### Testing the view
 
-The unconnected view is an ordinary component. Render it with plain props; no store, no network:
+The unconnected view is an ordinary component. Rendering use cases run against plain props; interaction use cases spy on the store method. No network involved either way.
 
 **`TodoList.test.tsx`**
 
 ```tsx
-import { expect, test } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { todoStore } from "./TodoStore";
 import { TodoListView } from "./TodoList";
 
-test("renders todos and strikes through completed ones", () => {
-  render(
-    <TodoListView
-      todos={[
-        { id: "1", text: "Write docs", done: false },
-        { id: "2", text: "Ship it", done: true },
-      ]}
-    />
-  );
+describe("TodoListView", () => {
+  it("renders todos and strikes through the completed ones", () => {
+    render(
+      <TodoListView
+        todos={[
+          { id: "1", text: "Write docs", done: false },
+          { id: "2", text: "Ship it", done: true },
+        ]}
+      />
+    );
 
-  expect(screen.getByText("Write docs")).toBeTruthy();
-  expect(screen.getByText("Ship it").tagName).toBe("S");
+    expect(screen.getByText("Write docs")).toBeTruthy();
+    expect(screen.getByText("Ship it").tagName).toBe("S");
+  });
+
+  it("completes a todo when it is clicked", () => {
+    const complete = vi.spyOn(todoStore, "complete").mockImplementation(() => {});
+    render(<TodoListView todos={[{ id: "3", text: "Review PR", done: false }]} />);
+
+    fireEvent.click(screen.getByText("Review PR"));
+
+    expect(complete).toHaveBeenCalledWith("3");
+  });
 });
 ```
 
-This split is the testing story in miniature: business logic tests run against the store without rendering, and view tests run against plain props without a store.
+Read the test names top to bottom and you get the feature's use cases: load, fail, add, complete, render, click. Store use cases run without rendering; view use cases run without a store or network.
 
 ## Choosing the Right Tool
 
