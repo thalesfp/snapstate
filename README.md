@@ -92,9 +92,14 @@ export function TodoListView({ todos }: { todos: Todo[] }) {
 }
 
 export const TodoList = todoStore.connect(TodoListView, {
+  // Subscribes to the "todos" key and passes it as the `todos` prop.
+  // The component re-renders only when `todos` changes.
   select: ["todos"],
+  // (optional) Runs on mount and tracks the loading/error status automatically
   fetch: (s) => s.loadTodos(),
+  // (optional) Shows while fetch is in progress
   loading: () => <p>Loading...</p>,
+  // (optional) Shows when fetch fails, receiving the error message
   error: ({ error }) => <p>Error: {error}</p>,
 });
 ```
