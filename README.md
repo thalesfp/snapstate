@@ -33,19 +33,27 @@ React and Zod are optional peer dependencies, needed only for their entry points
 
 ## Quick Start
 
-Define a store, connect it, render it. No `useEffect`, no `useState`.
+A working feature is three small files: a store that owns the logic, a view that renders it, and any other component sharing the same store. No `useEffect`, no `useState`.
 
-```tsx
+**`TodoStore.ts`** holds state, business logic, and the shared instance:
+
+```ts
 import { SnapStore } from "@thalesfp/snapstate/react";
+import type { StoreOptions } from "@thalesfp/snapstate";
 
-interface State {
-  todos: { id: string; text: string; done: boolean }[];
+export interface Todo {
+  id: string;
+  text: string;
+  done: boolean;
 }
 
-// 1. The store owns state and business logic
-class TodoStore extends SnapStore<State, "load"> {
-  constructor() {
-    super({ todos: [] });
+export interface TodoState {
+  todos: Todo[];
+}
+
+export class TodoStore extends SnapStore<TodoState, "load"> {
+  constructor(options?: StoreOptions) {
+    super({ todos: [] }, options);
   }
 
   loadTodos() {
@@ -62,9 +70,16 @@ class TodoStore extends SnapStore<State, "load"> {
 }
 
 export const todoStore = new TodoStore();
+```
 
-// 2. The component only renders
-function TodoListView({ todos }: { todos: State["todos"] }) {
+Accepting `StoreOptions` in the constructor is deliberate: it lets tests inject a mock HTTP client, as shown below.
+
+**`TodoList.tsx`** renders, and `connect()` wires it up with fetch, loading, and error handling. Exporting the unconnected view keeps it testable with plain props:
+
+```tsx
+import { todoStore, type Todo } from "./TodoStore";
+
+export function TodoListView({ todos }: { todos: Todo[] }) {
   return (
     <ul>
       {todos.map((t) => (
@@ -76,16 +91,20 @@ function TodoListView({ todos }: { todos: State["todos"] }) {
   );
 }
 
-// 3. connect() wires them together and handles fetch, loading, and errors
 export const TodoList = todoStore.connect(TodoListView, {
   select: ["todos"],
   fetch: (s) => s.loadTodos(),
   loading: () => <p>Loading...</p>,
   error: ({ error }) => <p>Error: {error}</p>,
 });
+```
 
-// 4. Any other component can share the same store, no prop drilling
-function TodoCountView({ todos }: { todos: State["todos"] }) {
+**`TodoCount.tsx`** shows why the store lives at module level: any other component connects to the same instance, with no prop drilling:
+
+```tsx
+import { todoStore, type Todo } from "./TodoStore";
+
+function TodoCountView({ todos }: { todos: Todo[] }) {
   return <p>{todos.filter((t) => !t.done).length} remaining</p>;
 }
 
@@ -94,7 +113,69 @@ export const TodoCount = todoStore.connect(TodoCountView, {
 });
 ```
 
-`TodoList` and `TodoCount` share one store instance, which is why it lives at module level. If only one component ever used this store, you would create it with [`SnapStore.scoped()`](#scoped-stores) instead; the [next section](#choosing-the-right-tool) covers how to choose.
+If only one component ever used this store, you would create it with [`SnapStore.scoped()`](#scoped-stores) instead; the [next section](#choosing-the-right-tool) covers how to choose.
+
+### Testing the store
+
+Stores are plain classes, so store tests need no React at all. Inject a mock HTTP client through the constructor and call methods directly:
+
+**`TodoStore.test.ts`**
+
+```ts
+import { expect, test, vi } from "vitest";
+import type { HttpClient } from "@thalesfp/snapstate";
+import { TodoStore } from "./TodoStore";
+
+const todos = [{ id: "1", text: "Write docs", done: false }];
+const mockClient: HttpClient = { request: vi.fn().mockResolvedValue(todos) };
+
+test("loadTodos stores the response and tracks status", async () => {
+  const store = new TodoStore({ httpClient: mockClient });
+
+  await store.loadTodos();
+
+  expect(store.getSnapshot().todos).toEqual(todos);
+  expect(store.getStatus("load").status.isReady).toBe(true);
+});
+
+test("complete marks the matching todo as done", () => {
+  const store = new TodoStore();
+  store.addTodo("Write docs");
+  const { id } = store.getSnapshot().todos[0];
+
+  store.complete(id);
+
+  expect(store.getSnapshot().todos[0].done).toBe(true);
+});
+```
+
+### Testing the view
+
+The unconnected view is an ordinary component. Render it with plain props; no store, no network:
+
+**`TodoList.test.tsx`**
+
+```tsx
+import { expect, test } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { TodoListView } from "./TodoList";
+
+test("renders todos and strikes through completed ones", () => {
+  render(
+    <TodoListView
+      todos={[
+        { id: "1", text: "Write docs", done: false },
+        { id: "2", text: "Ship it", done: true },
+      ]}
+    />
+  );
+
+  expect(screen.getByText("Write docs")).toBeTruthy();
+  expect(screen.getByText("Ship it").tagName).toBe("S");
+});
+```
+
+This split is the testing story in miniature: business logic tests run against the store without rendering, and view tests run against plain props without a store.
 
 ## Choosing the Right Tool
 
@@ -619,28 +700,7 @@ setHttpClient({
 
 `setDefaultHeaders({ Authorization: ... })` merges headers into every request and works with both the default and custom clients. Both settings are module-level globals: fine in the browser, but on a server that renders for many users, do not put per-user tokens in them. Use a per-store client there instead.
 
-### Testing stores
-
-Stores test without React. Inject a mock client through constructor options and call methods directly:
-
-```ts
-const mockClient: HttpClient = {
-  async request() {
-    return [{ id: "1", text: "Test", done: false }];
-  },
-};
-
-test("loadTodos stores the response", async () => {
-  const store = new TodoStore({ httpClient: mockClient });
-
-  await store.loadTodos();
-
-  expect(store.getSnapshot().todos).toHaveLength(1);
-  expect(store.getStatus("load").status.isReady).toBe(true);
-});
-```
-
-This is the payoff of keeping logic in stores: business rules, async flows, and error states are all testable with plain unit tests.
+A per-store client, passed through constructor options, overrides the global one for that store only. It is also the standard testing tool; see [Testing the store](#testing-the-store) in the Quick Start.
 
 ## Best Practices Summary
 

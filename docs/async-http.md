@@ -217,11 +217,13 @@ Both settings are module-level globals. That is fine in the browser, where one u
 
 ### Per-store client
 
-Constructor options override the global client for one store. This is the standard way to test stores:
+Constructor options override the global client for one store. This is the standard way to test stores (the store's constructor must forward options to `super`):
 
 ```typescript
+import { vi } from "vitest";
+
 const mockClient: HttpClient = {
-  async request() { return { id: "1", name: "Test" }; },
+  request: vi.fn().mockResolvedValue({ id: "1", name: "Test" }),
 };
 
 const store = new UserStore({ httpClient: mockClient });
