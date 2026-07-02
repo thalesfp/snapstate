@@ -34,6 +34,18 @@ describe("computed", () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
+  it("recomputes synchronously after a dep change with default autoBatch", () => {
+    const store = createStore({ price: 100, tax: 10 });
+    const total = store.computed(["price", "tax"], (s) => s.price + s.tax);
+
+    expect(total.get()).toBe(110);
+
+    store.set("price", 200);
+    // state.get is already fresh, so computed.get must not lag behind it
+    expect(store.get("price")).toBe(200);
+    expect(total.get()).toBe(210);
+  });
+
   it("does not recompute when unrelated path changes", () => {
     const store = createStore(
       { price: 100, tax: 10, unrelated: "x" },

@@ -8,7 +8,7 @@ import type {
   GetByPath,
 } from "./types.js";
 import { SubscriptionTrie } from "./trie.js";
-import { applyUpdate, getAtPath } from "./structural.js";
+import { applyUpdate, getAtPath, storedValue } from "./structural.js";
 import { createComputed } from "./computed.js";
 
 /**
@@ -48,9 +48,8 @@ export function createStore<T extends object>(
       deduped.push(p);
     }
 
-    for (const path of deduped) {
-      trie.notify(path);
-    }
+    // One collection across all paths so each listener fires once per flush
+    trie.notifyPaths(deduped);
   }
 
   function scheduleFlush(): void {
@@ -114,7 +113,7 @@ export function createStore<T extends object>(
   }
 
   function computed<V>(deps: (keyof T & string)[], fn: (state: T) => V): ComputedRef<V> {
-    return createComputed<T, V>({ getSnapshot, subscribe }, deps, fn);
+    return createComputed<T, V>({ getSnapshot }, deps, fn);
   }
 
   function notify(): void {
@@ -122,23 +121,14 @@ export function createStore<T extends object>(
   }
 
   function reset(...paths: string[]): void {
-    if (paths.length === 0) {
-      const allKeys = new Set([
-        ...Object.keys(initialState),
-        ...Object.keys(state),
-      ]);
-      batch(() => {
-        for (const p of allKeys) {
-          set(p as any, getAtPath(initialState, p) as any);
-        }
-      });
-    } else {
-      batch(() => {
-        for (const p of paths) {
-          set(p as any, getAtPath(initialState, p) as any);
-        }
-      });
-    }
+    const keys = paths.length === 0
+      ? new Set([...Object.keys(initialState), ...Object.keys(state)])
+      : paths;
+    batch(() => {
+      for (const p of keys) {
+        set(p as any, storedValue(getAtPath(initialState, p)) as any);
+      }
+    });
   }
 
   function destroy(): void {

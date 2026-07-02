@@ -50,6 +50,19 @@ describe("SubscriptionTrie", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it("does not notify mid-path wildcard listeners for non-matching paths", () => {
+    const trie = new SubscriptionTrie();
+    const listener = vi.fn();
+    trie.add("a.*.c", listener);
+
+    trie.notify("a.b.c");
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // "a.b.d" does not match "a.*.c"
+    trie.notify("a.b.d");
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
   it("unsubscribes correctly", () => {
     const trie = new SubscriptionTrie();
     const listener = vi.fn();
