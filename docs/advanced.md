@@ -1,13 +1,13 @@
 ---
 title: Advanced
-description: Cross-store sync, custom HTTP clients, standalone usage, and TypeScript types
+description: Cross-store sync, standalone usage, TypeScript types, and performance notes
 ---
 
 # Advanced
 
 ## Cross-Store Synchronization with derive()
 
-Keep a local state path in sync with a value from an external store using `derive()`:
+Keep a local state path in sync with a value from another store. The preferred setup injects the source through the constructor, so the store never imports a concrete singleton and stays testable with a mock:
 
 ```typescript
 class AuthStore extends SnapStore<{ token: string }> {
@@ -25,39 +25,28 @@ class AuthStore extends SnapStore<{ token: string }> {
 }
 
 class ProfileStore extends SnapStore<{ authToken: string; name: string }> {
-  constructor(authStore: AuthStore) {
+  constructor(auth: Subscribable<{ token: string }>) {
     super({ authToken: "", name: "" });
-    this.derive("authToken", authStore, (s) => s.token);
+    this.derive("authToken", auth, (s) => s.token);
   }
 }
-```
 
-`derive` uses `Object.is` comparison to skip no-op updates and is automatically cleaned up on `destroy()`.
+// app wiring
+const authStore = new AuthStore();
+const profileStore = new ProfileStore(authStore);
 
-## Custom HTTP Client
-
-Replace the default `fetch`-based client globally:
-
-```typescript
-import { setHttpClient } from "@thalesfp/snapstate";
-
-setHttpClient({
-  async request(url, init) {
-    // Use axios, ky, or any HTTP library
-    const response = await myHttpLib.request({
-      url,
-      method: init?.method ?? "GET",
-      data: init?.body,
-      headers: init?.headers,
-    });
-    return response.data;
-  },
+// test wiring
+const profileUnderTest = new ProfileStore({
+  subscribe: () => () => {},
+  getSnapshot: () => ({ token: "test-token" }),
 });
 ```
 
+`derive` compares with `Object.is` to skip no-op updates and cleans up automatically on `destroy()`. The selector should return a stable reference for unchanged values; selecting a primitive (as above) is the safest pattern.
+
 ## Using Without React
 
-The core `snapstate` export has no React dependency:
+The core `@thalesfp/snapstate` export has no React dependency. Stores work anywhere JavaScript runs:
 
 ```typescript
 import { SnapStore } from "@thalesfp/snapstate";
@@ -74,17 +63,16 @@ class CounterStore extends SnapStore<{ count: number }> {
 
 const store = new CounterStore();
 
-// Manual subscription
 const unsub = store.subscribe("count", () => {
   console.log("Count:", store.getSnapshot().count);
 });
 
-store.increment(); // logs after microtask flush
+store.increment(); // state updates immediately; the log arrives after the microtask flush
 ```
 
 ## Low-Level createStore
 
-For simple cases where you don't need a class:
+When a full class is overkill, `createStore` gives you the same reactive core as a plain object:
 
 ```typescript
 import { createStore } from "@thalesfp/snapstate";
@@ -99,14 +87,14 @@ store.reset("count");     // back to 0
 store.destroy();
 ```
 
-## TypeScript Types
+Prefer a `SnapStore` subclass as soon as the state has behavior attached; methods on a class are where business logic belongs.
 
-Snapstate exports several utility types:
+## TypeScript Types
 
 ```typescript
 import type {
   DotPaths,        // Union of all valid dot-paths for a type
-  GetByPath,       // Extract nested type at a dot-path
+  GetByPath,       // Extract the nested type at a dot-path
   AsyncStatus,     // { value, isIdle, isLoading, isReady, isError }
   OperationState,  // { status: AsyncStatus, error: string | null }
   HttpClient,      // { request<R>(url, init?) => Promise<R> }
@@ -117,7 +105,7 @@ import type {
 
 ### DotPaths
 
-Provides autocomplete for valid paths:
+Autocomplete for valid paths:
 
 ```typescript
 interface State {
@@ -130,16 +118,21 @@ type Paths = DotPaths<State>;
 
 ### GetByPath
 
-Extracts the type at a path:
+The type at a path:
 
 ```typescript
 type Name = GetByPath<State, "user.name">; // string
 ```
 
+These two types are what make `state.get`/`state.set` fully typed; use them to build your own typed helpers on top of a store.
+
 ## Performance Notes
 
-- **Structural sharing** ensures unchanged subtrees keep reference identity across updates
-- **Microtask batching** coalesces multiple synchronous sets into a single subscriber notification
-- **Select mode** in `connect()` subscribes only to specific paths, avoiding unnecessary re-renders
-- **Computed refs** are lazy -- they only recompute when dependencies actually change
-- **TakeLatest** in async operations prevents stale responses from overwriting newer data
+- **Structural sharing**: unchanged subtrees keep reference identity across updates, so shallow comparisons are reliable change signals.
+- **Batched notifications**: all synchronous `set()` calls in one flush produce at most one call per listener.
+- **Select mode** in `connect()` subscribes to specific paths, so unrelated changes never reach the component.
+- **Computed refs** compare dependency references on each read and recompute only when a dependency actually changed. Reads are always fresh, with no notification lag.
+- **Take-latest** ensures a superseded response never overwrites newer data at a `target` path.
+- **`getStatus` returns frozen, identity-stable objects**, so mapping status into props costs nothing between status changes.
+
+The biggest lever in application code: prefer `select` over a `props` mapper that builds fresh objects or arrays, and derive expensive values with `computed` instead of recomputing them in every mapper run.

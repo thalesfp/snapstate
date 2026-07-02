@@ -5,7 +5,7 @@ description: Install and start using Snapstate for reactive state management in 
 
 # Getting Started
 
-Snapstate is a reactive state management library for React. It provides testable, extensible, class-based stores with dot-path subscriptions, structural sharing, and built-in async support.
+Snapstate is a state management library for React built around class-based stores. Stores hold state and business logic; components render. You get typed dot-path access (`"user.name"`), granular subscriptions, structural sharing, and built-in async tracking, all testable without React.
 
 ## Installation
 
@@ -13,12 +13,23 @@ Snapstate is a reactive state management library for React. It provides testable
 npm install @thalesfp/snapstate
 ```
 
-Snapstate has optional peer dependencies:
+Peer dependencies are optional and only needed for their entry points:
 
-- `react >= 18` -- required only if you use `snapstate/react`
-- `zod >= 3` -- required only if you use `snapstate/form`
+- `react >= 18` for `@thalesfp/snapstate/react` and `/form`
+- `zod >= 4` for `@thalesfp/snapstate/form`
+
+## Entry Points
+
+| Path | Use case |
+| --- | --- |
+| `@thalesfp/snapstate` | Core store, no React dependency |
+| `@thalesfp/snapstate/react` | React integration: `connect()` and `SnapStore.scoped()` |
+| `@thalesfp/snapstate/form` | Zod-based form stores |
+| `@thalesfp/snapstate/url` | Reactive URL search params |
 
 ## Quick Example
+
+Define a store with state and methods:
 
 ```typescript
 import { SnapStore } from "@thalesfp/snapstate/react";
@@ -32,10 +43,6 @@ class TodoStore extends SnapStore<TodoState> {
     super({ items: [] });
   }
 
-  get items() {
-    return this.state.get("items");
-  }
-
   addTodo(title: string) {
     this.state.append("items", { id: Date.now(), title, done: false });
   }
@@ -45,43 +52,35 @@ class TodoStore extends SnapStore<TodoState> {
   }
 }
 
-const store = new TodoStore();
+export const todoStore = new TodoStore();
 ```
 
-Connect it to a React component:
+Connect it to a component. The component receives store values as props and re-renders when they change:
 
 ```tsx
 function TodoList({ items }: { items: TodoState["items"] }) {
   return (
     <ul>
       {items.map((t) => (
-        <li key={t.id}>{t.title}</li>
+        <li key={t.id} onClick={() => todoStore.toggle(t.id)}>{t.title}</li>
       ))}
     </ul>
   );
 }
 
-const ConnectedTodoList = store.connect(TodoList, (s) => ({
-  items: s.items,
-}));
+const ConnectedTodoList = todoStore.connect(TodoList, {
+  select: ["items"],
+});
 ```
 
-No `useEffect`, no `useState` -- the `connect` HOC handles subscriptions and re-renders automatically.
-
-## Export Paths
-
-Snapstate ships three entry points:
-
-| Path | Use case |
-| --- | --- |
-| `snapstate` | Core store, no React dependency |
-| `snapstate/react` | React integration with `connect` HOC |
-| `snapstate/form` | Zod-based form stores |
+No `useEffect`, no `useState`. The `connect()` HOC handles subscriptions and re-renders; the store handles the logic.
 
 ## What's Next
 
-- [Core Concepts](core-concepts.md) -- understand paths, subscriptions, and structural sharing
-- [Store API](store-api.md) -- full reference for state and array operations
-- [React Integration](react-integration.md) -- connect stores to React components
-- [Async & HTTP](async-http.md) -- built-in data fetching
-- [Forms](forms.md) -- Zod-powered form management
+- [Core Concepts](core-concepts.md): paths, subscriptions, structural sharing, batching
+- [Store API](store-api.md): full reference for state and array operations
+- [React Integration](react-integration.md): `connect`, `select`, `scoped`, lifecycle
+- [Async & HTTP](async-http.md): tracked operations and data fetching
+- [Forms](forms.md): Zod-powered form management
+- [URL Parameters](url-params.md): reading and writing search params
+- [Advanced](advanced.md): `derive`, `createStore`, custom HTTP clients, types

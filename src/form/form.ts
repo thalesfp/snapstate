@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ReactSnapStore } from "../react/store.js";
 import { asyncStatus } from "../core/types.js";
+import { storedValue } from "../core/structural.js";
 import type { OperationState } from "../core/types.js";
 
 /** When to run field validation: on form submit, on field blur, or on every change. */
@@ -215,7 +216,7 @@ export class SnapFormStore<
 
   /** Programmatically set a field's value. Also syncs the DOM element and triggers change validation. */
   setValue<F extends keyof V & string>(field: F, value: V[F]): void {
-    this.state.set(`values.${field}` as any, value);
+    this.state.set(`values.${field}` as any, storedValue(value));
     this.syncValueToDom(field, value);
     this.handleChange(field);
   }

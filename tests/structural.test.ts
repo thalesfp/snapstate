@@ -56,6 +56,13 @@ describe("structural sharing", () => {
       const next = applyUpdate(state, "a.b", 1);
       expect(next).toEqual({ a: { b: 1 } });
     });
+
+    it("creates an array when a missing path segment is a numeric index", () => {
+      const state: Record<string, unknown> = {};
+      const next = applyUpdate(state, "items.0", 42);
+      expect(Array.isArray(next.items)).toBe(true);
+      expect(next.items).toEqual([42]);
+    });
   });
 
   describe("getAtPath", () => {

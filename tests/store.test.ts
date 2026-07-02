@@ -60,6 +60,18 @@ describe("Store", () => {
       expect(store.get("a")).toBe(20);
     });
 
+    it("coalesces synchronous sets across different paths into one notification", async () => {
+      const store = createStore({ a: 1, b: 2 });
+      const listener = vi.fn();
+      store.subscribe(listener);
+
+      store.set("a", 10);
+      store.set("b", 20);
+
+      await Promise.resolve();
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
     it("notifies global subscribers", async () => {
       const store = createStore({ x: 1 });
       const listener = vi.fn();
@@ -130,6 +142,36 @@ describe("Store", () => {
       });
 
       // "user" subsumes "user.name", so only one notification
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it("notifies a global listener once for a batch spanning multiple paths", () => {
+      const store = createStore({ a: 1, b: 2, c: 3 }, { autoBatch: false });
+      const listener = vi.fn();
+      store.subscribe(listener);
+
+      store.batch(() => {
+        store.set("a", 10);
+        store.set("b", 20);
+        store.set("c", 30);
+      });
+
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it("notifies an ancestor listener once for a batch touching multiple children", () => {
+      const store = createStore(
+        { user: { name: "a", age: 1 } },
+        { autoBatch: false },
+      );
+      const listener = vi.fn();
+      store.subscribe("user", listener);
+
+      store.batch(() => {
+        store.set("user.name", "b");
+        store.set("user.age", 2);
+      });
+
       expect(listener).toHaveBeenCalledTimes(1);
     });
   });
@@ -253,6 +295,20 @@ describe("reset", () => {
     expect(store.get("user.name")).toBe("Alice");
     expect(store.get("user.age")).toBe(25);
   });
+
+  it("restores function-valued fields without invoking them", () => {
+    const formatter = vi.fn((n: number) => String(n));
+    const store = createStore<{ format: (n: number) => string }>(
+      { format: formatter },
+      { autoBatch: false },
+    );
+
+    store.set("format", () => (n: number) => n.toFixed(2));
+    store.reset();
+
+    expect(store.get("format")).toBe(formatter);
+    expect(formatter).not.toHaveBeenCalled();
+  });
 });
 
 describe("setHttpClient export", () => {
@@ -366,6 +422,24 @@ describe("resetStatus", () => {
 
     await fetchPromise;
     expect(store.getStatus("load").status.isReady).toBe(true);
+  });
+});
+
+describe("getStatus identity", () => {
+  class StatusStore extends SnapStore<{ value: string }, "load"> {
+    doFetch(fn: () => Promise<void>) {
+      return this.api.fetch({ key: "load", fn });
+    }
+  }
+
+  it("returns the same object while the status is unchanged", async () => {
+    const store = new StatusStore({ value: "" });
+    // Stable identity is required for connect()'s shallowEqual prop caching:
+    // a fresh object per call re-renders the component on every notification.
+    expect(store.getStatus("load")).toBe(store.getStatus("load"));
+
+    await store.doFetch(async () => {});
+    expect(store.getStatus("load")).toBe(store.getStatus("load"));
   });
 });
 

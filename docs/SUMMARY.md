@@ -6,4 +6,5 @@
 * [React Integration](react-integration.md)
 * [Async & HTTP](async-http.md)
 * [Forms](forms.md)
+* [URL Parameters](url-params.md)
 * [Advanced](advanced.md)

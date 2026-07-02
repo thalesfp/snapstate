@@ -5,11 +5,18 @@ description: Connect stores to React components with the connect HOC and scoped 
 
 # React Integration
 
-Import from `snapstate/react` to get React-aware stores with the `connect` HOC.
+Import from `@thalesfp/snapstate/react` to get React-aware stores with `connect()` and `SnapStore.scoped()`.
 
 ```typescript
 import { SnapStore } from "@thalesfp/snapstate/react";
 ```
+
+## Which form to use
+
+- **`select`**: the component needs specific state fields. Subscribes to those paths only, so unrelated changes never re-render it. This is the default choice.
+- **`props` mapper**: the component needs derived or combined values, store getters, or `getStatus()`. Runs on every store change and skips re-renders via shallow equality of the result.
+- **`SnapStore.scoped()`**: the store is used by exactly one component and should reset on every mount (detail pages, modals, wizards).
+- **Shared singleton + `connect()`**: two or more components need the same data.
 
 ## Creating a Store
 
@@ -28,10 +35,6 @@ class AppStore extends SnapStore<AppState> {
     return this.state.get("count");
   }
 
-  get userName() {
-    return this.state.get("user.name");
-  }
-
   increment() {
     this.state.set("count", (prev) => prev + 1);
   }
@@ -40,9 +43,34 @@ class AppStore extends SnapStore<AppState> {
 const appStore = new AppStore();
 ```
 
-## connect() -- Simple Props Mapping
+Notice the pattern: components will call `increment()`, not write state themselves. Keeping writes inside store methods keeps the logic testable and the components dumb.
 
-Map store state to component props. The component re-renders only when the mapped values change (shallow equality).
+## connect() with select
+
+For top-level keys, pass an array. Each key becomes a prop:
+
+```tsx
+const ConnectedTodos = todoStore.connect(TodoView, {
+  select: ["todos", "filter"],
+});
+```
+
+For nested paths, use the callback form with `pick`:
+
+```tsx
+const ConnectedName = userStore.connect(NameDisplay, {
+  select: (pick) => ({
+    name: pick("user.name"),
+    avatar: pick("user.avatar"),
+  }),
+});
+```
+
+Paths are captured once when `connect()` runs, so `select` must always pick the same set of paths. No conditionals inside `select`. If you need dynamic selection, use the `props` mapper.
+
+## connect() with a props mapper
+
+The shorthand form takes the mapper as the second argument:
 
 ```tsx
 function Counter({ count }: { count: number }) {
@@ -52,122 +80,99 @@ function Counter({ count }: { count: number }) {
 const ConnectedCounter = appStore.connect(Counter, (store) => ({
   count: store.count,
 }));
-
-// Use it like a normal component
-<ConnectedCounter />
 ```
 
-Own props pass through:
+The component re-renders only when the mapped values change under shallow comparison. That comparison is per-key reference equality, so avoid creating fresh arrays or objects in the mapper (`todos.filter(...)` creates a new array every time and defeats the check). Derive such values in the store with `computed`, or map the raw array and filter during render.
+
+Own props pass through untouched:
 
 ```tsx
-function Counter({ count, label }: { count: number; label: string }) {
-  return <span>{label}: {count}</span>;
-}
-
-const ConnectedCounter = appStore.connect(Counter, (store) => ({
-  count: store.count,
-}));
-
-<ConnectedCounter label="Total" />
+<ConnectedCounter label="Total" />  // label reaches the component alongside count
 ```
 
-## connect() -- With Fetch
+## Async data loading
 
-Handle async data loading without `useEffect` or `useState`. Provide `loading` and `error` components for lifecycle states.
+Add `fetch` to load data on mount, plus `loading` and `error` components for the in-between states. Works with both `select` and `props`:
 
 ```tsx
-function UserProfile({ name }: { name: string }) {
-  return <h1>{name}</h1>;
-}
-
 const ConnectedProfile = userStore.connect(UserProfile, {
-  props: (store) => ({ name: store.userName }),
-  fetch: async (store) => {
-    await store.loadUser();
-  },
+  select: ["user"],
+  fetch: (store) => store.loadUser(),
   loading: () => <div>Loading...</div>,
   error: ({ error }) => <div>Error: {error}</div>,
 });
 ```
 
-### Config Options
+### Config options
 
 | Option | Description |
 | --- | --- |
-| `props` | Maps store state to component props |
-| `fetch` | Async function called on mount (and when `deps` change) |
-| `loading` | Component shown while fetch is in progress |
-| `error` | Component shown when fetch fails, receives `{ error }` |
-| `setup` | Callback on mount `(store, props) => void` |
-| `cleanup` | Callback on unmount `(store, props) => void` |
-| `deps` | `(props) => any[]` -- re-fetches when deps change |
-| `template` | Wrapper component for the rendered output |
+| `select` / `props` | What the component receives (pick one) |
+| `fetch` | Async function on mount and when `deps` change |
+| `loading` | Component while `fetch` runs |
+| `error` | Component when `fetch` rejects; receives `{ error }` |
+| `setup` | Sync side-effect before `fetch` |
+| `cleanup` | Runs on unmount, and before re-running on `deps` change |
+| `deps` | `(props, params) => unknown[]`; re-runs lifecycle when values change |
+| `urlParams` | A `createUrlParams()` source; typed params flow into `fetch`, `setup`, `deps` |
+| `template` | Layout component wrapped around the output |
 
-## connect() -- Select Mode
+All lifecycle options are StrictMode-safe.
 
-For granular subscriptions, pass an array of top-level keys:
+## Dependencies (`deps`)
+
+Re-run `fetch` when a prop or URL param changes:
 
 ```tsx
-const ConnectedTodos = store.connect(TodoView, {
-  select: ["todos", "filter"],
+const ProjectDetail = projectStore.connect(ProjectView, {
+  select: ["project"],
+  fetch: (store, props) => store.fetchProject(props.id),
+  cleanup: (store) => store.reset(),
+  deps: (props) => [props.id],
+  loading: () => <Skeleton />,
 });
 ```
 
-For nested paths, use the callback form with `pick`:
+Return primitives from `deps` (`[props.id]`, `[params.filter]`). Returning a fresh object, or the whole `params` object, makes every render look like a change and refetches in a loop.
+
+## scoped() for component-scoped stores
+
+`SnapStore.scoped()` creates the store on mount and destroys it on unmount. Prefer it whenever the store serves exactly one component; each mount starts from clean state and nothing needs manual reset.
 
 ```tsx
-const ConnectedName = store.connect(NameDisplay, {
-  select: (pick) => ({
-    name: pick("user.name"),
-  }),
-});
-```
-
-Paths are captured once at connect-time. The component only re-renders when the selected paths change, not on every store update.
-
-Both forms support `fetch`:
-
-```tsx
-const ConnectedName = store.connect(NameDisplay, {
-  select: (pick) => ({
-    name: pick("user.name"),
-  }),
-  fetch: async (store) => {
-    await store.loadUser();
-  },
-  loading: LoadingSpinner,
-  error: ErrorBanner,
-});
-```
-
-## scoped() -- Component-Scoped Stores
-
-Create store instances that are tied to a component's lifecycle -- created on mount, destroyed on unmount.
-
-```tsx
-const ScopedTodoList = SnapStore.scoped(TodoList, {
-  factory: () => new TodoStore(),
-  props: (store) => ({ items: store.items }),
-  fetch: async (store) => {
-    await store.loadTodos();
-  },
+const TodoDetail = SnapStore.scoped(TodoDetailView, {
+  factory: () => new TodoDetailStore(),
+  props: (store) => ({ todo: store.getSnapshot().todo }),
+  fetch: (store, props) => store.fetchTodo(props.id),
+  deps: (props) => [props.id],
   loading: () => <div>Loading...</div>,
 });
 ```
 
-Each mounted instance gets its own store. Compatible with React StrictMode.
+Every mounted instance gets its own store, so two `TodoDetail` components on screen never share state. All lifecycle options work the same as in `connect()`. StrictMode-safe: the store is created in an effect so paired mount/unmount cycles create and destroy cleanly.
 
-## Template Wrapping
+If a second component later needs the same data, promote the store to a shared singleton and switch to `connect()`.
 
-Wrap connected components in a layout:
+## Template wrapping
+
+`template` wraps the connected component in a layout. The template receives the same mapped props plus `children`, and renders only after the fetch guards, so `children` is always the ready component:
 
 ```tsx
-function PageLayout({ children }: { children: React.ReactNode }) {
-  return <div className="page">{children}</div>;
+function TodoLayout({ remaining, children }: { remaining: number; children: React.ReactNode }) {
+  return (
+    <div className="app">
+      <h1>Todos ({remaining})</h1>
+      {children}
+    </div>
+  );
 }
 
-const ConnectedPage = store.connect(PageContent, {
-  props: (store) => ({ data: store.data }),
-  template: PageLayout,
+const TodoApp = todoStore.connect(TodoAppInner, {
+  select: ["remaining"],
+  fetch: (s) => s.loadTodos(),
+  template: TodoLayout,
+  loading: () => <Skeleton />,
 });
 ```
+
+Works with `props`, `select`, and `scoped`.
