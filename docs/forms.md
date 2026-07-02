@@ -5,13 +5,13 @@ description: Zod-powered form stores with validation, DOM binding, and async sub
 
 # Forms
 
-Snapstate includes a Zod-powered form module for type-safe form management with validation, DOM binding, and async submission.
+`SnapFormStore<V, K>` extends the React-enabled `SnapStore` with Zod validation, DOM binding, and a submit lifecycle. Use it whenever the main concern is form values, validation, and submission.
 
 ```typescript
 import { SnapFormStore } from "@thalesfp/snapstate/form";
 ```
 
-Requires `zod >= 3` as a peer dependency.
+Requires `zod >= 4` as a peer dependency.
 
 ## Creating a Form Store
 
@@ -27,127 +27,137 @@ const schema = z.object({
 type Values = z.infer<typeof schema>;
 
 class ContactForm extends SnapFormStore<Values, "save"> {
-  async save() {
-    await this.submit("save", async (values) => {
-      await this.api.post("save", "/api/contacts", { body: values });
+  constructor() {
+    super(schema, { name: "", email: "" }, { validationMode: "onBlur" });
+  }
+
+  save() {
+    return this.submit("save", async (values) => {
+      await this.http.request("/api/contacts", { method: "POST", body: values });
     });
   }
 }
 
-const form = new ContactForm(schema, { name: "", email: "" });
+const form = new ContactForm();
 ```
 
-### Configuration
+Inside a `submit` handler, use `this.http` for the request. The submit is already tracked under the key, so `this.api.*` with the same key would double-track it.
 
-The third constructor argument accepts:
+### Validation modes
 
-| Option | Values | Description |
+The third constructor argument sets when field validation runs:
+
+| Mode | Behavior | Choose it when |
 | --- | --- | --- |
-| `validationMode` | `"onSubmit"` \| `"onBlur"` \| `"onChange"` | When to trigger field validation |
+| `onSubmit` (default) | Validate only when `submit()` runs | Short forms; least noisy |
+| `onBlur` | Validate a field when it loses focus | Most forms; errors appear once the user finishes a field |
+| `onChange` | Validate on every change | Live feedback such as password strength |
 
 ## Binding to Inputs
 
-`register(field)` returns props for binding to DOM inputs:
+`register(field)` returns props to spread onto native form elements. It handles refs, initial values, and event binding:
 
 ```tsx
-function ContactFormView({ form }: { form: ContactForm }) {
+function ContactFormView({ errors }: { errors: FormErrors<Values> }) {
   return (
-    <form>
+    <form onSubmit={(e) => { e.preventDefault(); form.save()?.catch(() => {}); }}>
       <input {...form.register("name")} />
+      {errors.name && <span>{errors.name[0]}</span>}
+
       <input {...form.register("email")} type="email" />
+      {errors.email && <span>{errors.email[0]}</span>}
+
+      <button type="submit">Save</button>
     </form>
   );
 }
 ```
 
-`register` handles text, checkbox, radio, select (including multi-select), file, and date/time inputs. It returns `ref`, `name`, `defaultValue`/`defaultChecked`, `onBlur`, and `onChange` handlers based on the validation mode.
+Supported elements: text, number, checkbox, radio, textarea, select (including multiple), range, date/time/datetime-local, and file inputs. Values are coerced back to the schema's types: a number field reads as `number`, a date input as `Date`, a multi-select of numbers as `number[]`.
 
 ## Reading and Setting Values
 
 ```typescript
-form.values;            // current form values
-form.getValue("name");  // single field
-form.getValues();       // merged state + DOM ref values
+form.values;            // current values from state
+form.getValue("name");  // one field, including unsynced DOM input
+form.getValues();       // all fields, including unsynced DOM input
 
-form.setValue("name", "Alice");  // programmatic set + DOM sync
+form.setValue("name", "Alice");  // programmatic set + DOM sync + change validation
 ```
 
 ## Validation
 
-### Full Validation
-
 ```typescript
-const parsed = form.validate();
+const parsed = form.validate();  // full schema; returns parsed values or null
 if (parsed) {
-  // parsed is the Zod-validated data
+  // parsed is the Zod output type
 }
-// form.errors now contains any validation errors
-```
 
-### Per-Field Validation
+form.validateField("email");     // one field
 
-```typescript
-form.validateField("email");
-```
-
-### Error Management
-
-```typescript
-form.errors;              // { name?: string[], email?: string[] }
-form.isValid;             // true if no errors
-form.setError("email", "Already taken");
+form.errors;                     // { name?: string[], email?: string[] }
+form.isValid;                    // no errors present
+form.setError("email", "Already taken");  // append a manual error
 form.clearErrors();
 ```
 
 ## Dirty Tracking
 
 ```typescript
-form.isDirty;                // any field differs from initial?
-form.isFieldDirty("name");   // specific field dirty?
+form.isDirty;               // any field differs from initial values
+form.isFieldDirty("name");  // one field
 ```
+
+Comparison is aware of `Date` objects and arrays, so a date field is not dirty just because a new `Date` instance holds the same timestamp.
 
 ## Submission
 
-`submit(key, handler)` validates first, then runs the handler. Use `this.http` for HTTP calls inside the handler -- `this.api.*` methods cause double status tracking on the same key:
+`submit(key, handler)` validates first. If validation fails, it returns `undefined` without calling the handler. Otherwise it runs the handler with the parsed values under status tracking:
 
 ```typescript
-async save() {
-  await this.submit("save", async (values) => {
+save() {
+  return this.submit("save", async (values) => {
     await this.http.request("/api/save", { method: "POST", body: values });
   });
 }
 ```
 
-Submit status is tracked as an async operation:
+Track the status through state or `getStatus`:
 
 ```typescript
 form.getStatus("save").status.isLoading; // true during submission
 ```
 
-If validation fails, `submit` returns `undefined` without calling the handler.
+Two practices to follow:
+
+- **Handle the returned promise.** It rejects when the handler throws; await it in `try/catch` or attach `.catch()`, even if your UI reads the outcome from status.
+- **Disable the submit button while `isLoading`.** Submissions are not deduplicated automatically; a double click runs the handler twice.
 
 ## Reset and Clear
 
 ```typescript
-form.reset();   // restore to initial values, clear errors and submit status
-form.clear();   // zero out all fields to type-appropriate defaults
+form.reset();   // back to initial values; clears errors and submit status
+form.clear();   // empty every field to a type-appropriate zero value
 ```
 
 ## Updating Initial Values
 
+Populate the form from an API response. Updates both initial and current values and syncs the DOM:
+
 ```typescript
 form.setInitialValues({ name: "Pre-filled" });
-// Updates both initial and current values, syncs DOM refs
 ```
 
 ## Connecting to React
 
-`SnapFormStore` extends the React-enabled `SnapStore`, so you can use `connect`:
+`SnapFormStore` is a full `SnapStore`, so `connect()` works as usual. Map errors, dirty state, and submit status into props:
 
 ```tsx
-const ConnectedForm = form.connect(ContactFormView, (store) => ({
-  values: store.values,
-  errors: store.errors,
-  isDirty: store.isDirty,
+const ConnectedForm = form.connect(ContactFormView, (s) => ({
+  errors: s.errors,
+  isDirty: s.isDirty,
+  submitting: s.getStatus("save").status.isLoading,
 }));
 ```
+
+For a form that should reset every time it mounts, wrap it with `SnapStore.scoped()` and a factory that builds a fresh form store.

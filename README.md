@@ -8,67 +8,44 @@ State management for React built around class-based stores: testable, extensible
 npm install @thalesfp/snapstate
 ```
 
-## When To Use Snapstate
+## Why Snapstate
 
-Snapstate exists to keep business logic out of React components. React components should focus on rendering and UI interactions, not application rules. Overusing `useEffect` and `useState` often leads to logic that is difficult to test, difficult to extend, and hard to reason about. By moving business logic into explicit stores, the UI stays simpler, the logic becomes easier to test, and the application remains less coupled to React itself.
+Snapstate keeps business logic out of React components. Components focus on rendering; stores hold the state, the rules, and the async work. Because stores are plain classes with no React coupling, you can unit test them without rendering anything.
 
-- Use it when you want testable store classes with minimal React coupling.
-- Use it when shared state, loading states, and view lifecycle need to stay predictable.
-- Use something smaller when local component state and a few hooks are enough.
+Use Snapstate when:
+
+- You want business logic in testable classes instead of `useEffect` chains.
+- Shared state, loading states, and view lifecycle need to stay predictable.
+- You want typed dot-path access (`"user.name"`) with granular re-renders.
+
+Skip it when local component state and a few hooks are enough.
 
 ## Entry Points
 
-| Import | Description | Requires |
+| Import | What you get | Requires |
 |---|---|---|
-| `@thalesfp/snapstate` | Core `SnapStore`, types, `setHttpClient` | None |
-| `@thalesfp/snapstate/react` | `SnapStore` with `connect()` HOC | `react` |
-| `@thalesfp/snapstate/form` | `SnapFormStore` with Zod validation and form lifecycle | `react`, `zod` |
-| `@thalesfp/snapstate/url` | `createUrlParams`, `syncToUrl` for URL search params | None |
+| `@thalesfp/snapstate` | Core `SnapStore`, `createStore`, types, `setHttpClient` | Nothing |
+| `@thalesfp/snapstate/react` | `SnapStore` with `connect()` and `SnapStore.scoped()` | `react >= 18` |
+| `@thalesfp/snapstate/form` | `SnapFormStore` with Zod validation and submit lifecycle | `react >= 18`, `zod >= 4` |
+| `@thalesfp/snapstate/url` | `createUrlParams`, `syncToUrl` for URL search params | Nothing |
 
-React and Zod are optional peer dependencies, needed only when using their respective entry points. `qs` is bundled and requires no separate install.
-
-## Choose The Right API
-
-- Use `connect()` when you want simple store-to-props mapping for a shared store instance.
-- Use `select` when a component should subscribe to specific state paths instead of the whole mapped snapshot.
-- Use `SnapStore.scoped()` when each mounted view should get a fresh store instance.
-- Use `SnapFormStore` when the main concern is form values, validation, and submit lifecycle.
-- Use `createUrlParams` and `syncToUrl` when URL state should participate in the same store model.
-
-## Table Of Contents
-
-- [When To Use Snapstate](#when-to-use-snapstate)
-- [Entry Points](#entry-points)
-- [Choose The Right API](#choose-the-right-api)
-- [Quick Start](#quick-start)
-- [Stores](#stores)
-- [React Integration](#react-integration)
-- [Forms](#forms)
-- [URL Parameters](#url-parameters)
-- [Custom HTTP Client](#custom-http-client)
-- [Example App](#example-app)
-- [Docs](#docs)
-- [Benchmarks](#benchmarks)
-- [License](#license)
+React and Zod are optional peer dependencies, needed only for their entry points. `qs` is bundled.
 
 ## Quick Start
 
-### 1. Define a store
+Define a store, connect it, render it. No `useEffect`, no `useState`.
 
-```ts
+```tsx
 import { SnapStore } from "@thalesfp/snapstate/react";
 
 interface State {
   todos: { id: string; text: string; done: boolean }[];
 }
 
+// 1. The store owns state and business logic
 class TodoStore extends SnapStore<State, "load"> {
   constructor() {
     super({ todos: [] });
-  }
-
-  get todos() {
-    return this.state.get("todos");
   }
 
   loadTodos() {
@@ -85,11 +62,8 @@ class TodoStore extends SnapStore<State, "load"> {
 }
 
 export const todoStore = new TodoStore();
-```
 
-### 2. Connect it to React
-
-```tsx
+// 2. The component only renders
 function TodoListView({ todos }: { todos: State["todos"] }) {
   return (
     <ul>
@@ -102,144 +76,109 @@ function TodoListView({ todos }: { todos: State["todos"] }) {
   );
 }
 
+// 3. connect() wires them together and handles fetch, loading, and errors
 export const TodoList = todoStore.connect(TodoListView, {
-  props: (s) => ({ todos: s.todos }),
+  select: ["todos"],
   fetch: (s) => s.loadTodos(),
   loading: () => <p>Loading...</p>,
   error: ({ error }) => <p>Error: {error}</p>,
 });
 ```
 
+## Choosing the Right Tool
+
+This is the decision guide. Each row links to the section with details.
+
+| Situation | Use |
+|---|---|
+| State shared by several components or features (auth, session, a todo list used across views) | A module-level store instance plus [`connect()`](#react-integration) |
+| State that belongs to exactly one view, modal, or detail page, and should reset on every mount | [`SnapStore.scoped()`](#scoped-stores) |
+| A component that should re-render only when specific fields change | [`select`](#granular-subscriptions-select) in the connect config |
+| Props that combine or transform state, or call store getters | The [`props` mapper](#props-mapping) in the connect config |
+| Form values, validation, and submit lifecycle | [`SnapFormStore`](#forms) |
+| Reading URL search params into fetch and deps | [`createUrlParams`](#url-parameters) with the `urlParams` connect option |
+| Mirroring store state into the URL | [`syncToUrl`](#writing-state-to-url) |
+| A quick reactive value with no class or methods | [`createStore`](./docs/advanced.md#low-level-createstore) |
+
+Rules of thumb:
+
+- **Prefer `scoped()` when the store is used in one place.** A shared singleton for a detail page forces you to reset state manually between visits and leaks state between instances. `scoped()` creates a fresh store on mount and destroys it on unmount, so cleanup is automatic.
+- **Prefer a shared singleton when two or more components need the same data.** Export the instance from a module (`export const todoStore = new TodoStore()`) and connect each component to it.
+- **Prefer `select` over `props` for subscriptions.** `select` subscribes to specific paths, so the component re-renders only when those values change. Use the `props` mapper when you need derived values, getters, or conditional logic; it runs on every store change and relies on shallow equality of the result to skip re-renders.
+- **Keep business logic in store methods.** Components should call intent methods (`store.complete(id)`), not write state directly. This keeps logic testable and components dumb.
+- **Give every user-visible async operation its own key.** Keys drive `getStatus()`, which drives loading and error UI.
+
 ## Stores
 
-Stores hold state, expose methods, and notify subscribers. State changes use dot-paths (`"user.name"`, `"items.0.title"`) so listeners only fire when their specific path changes. Synchronous `set()` calls are auto-batched via `queueMicrotask`, and every `set()` preserves reference identity for unchanged subtrees.
+`SnapStore<T, K>` is the base class. `T` is the state shape. `K` is a union of async operation keys (use `never` if the store has none).
 
-`SnapStore<T, K>` is the base class. `T` is the state shape, `K` is the union of async operation keys.
+State changes go through dot-paths (`"user.name"`, `"items.0.title"`), so listeners fire only when their path changes. Every `set()` produces a new root object while unchanged subtrees keep their reference identity (structural sharing). Multiple synchronous `set()` calls coalesce into a single notification per flush.
 
-### State (`this.state.*`)
+### State methods (`this.state.*`)
 
 **Scalar:**
 
 | Method | Description |
 |---|---|
 | `get()` | Full state object |
-| `get(path)` | Value at a dot-path |
-| `set(path, value)` | Set a value or pass an updater `(prev) => next` |
+| `get(path)` | Value at a dot-path, fully typed |
+| `set(path, value)` | Set a value, or pass an updater `(prev) => next` |
 | `batch(fn)` | Group multiple sets into a single notification |
 | `merge(updates)` | Set multiple top-level keys in a single batch |
-| `computed(deps, fn)` | Lazily-recomputed derived value from dependency paths |
+| `computed(deps, fn)` | Derived value that recomputes when its dependency paths change |
 | `reset()` | Restore all state to initial values |
-| `reset(...paths)` | Restore only the specified paths to initial values |
+| `reset(...paths)` | Restore only the given paths |
 
 **Array:**
 
 | Method | Description |
 |---|---|
-| `append(path, ...items)` | Add items to end |
-| `prepend(path, ...items)` | Add items to start |
+| `append(path, ...items)` | Add items to the end |
+| `prepend(path, ...items)` | Add items to the start |
 | `insertAt(path, index, ...items)` | Insert at index |
 | `patch(path, predicate, updates)` | Shallow-merge into matching items |
 | `remove(path, predicate)` | Remove matching items |
-| `removeAt(path, index)` | Remove at index (supports negative) |
-| `at(path, index)` | Get item at index (supports negative) |
-| `filter(path, predicate)` | Return matching items (supports type predicates) |
-| `find(path, predicate)` | Return first match (supports type predicates) |
+| `removeAt(path, index)` | Remove at index (negative indices allowed) |
+| `at(path, index)` | Item at index (negative indices allowed) |
+| `filter(path, predicate)` | Matching items (type predicates narrow the result) |
+| `find(path, predicate)` | First match (type predicates narrow the result) |
 | `findIndexOf(path, predicate)` | Index of first match, or -1 |
-| `count(path, predicate)` | Count matching items |
+| `count(path, predicate)` | Number of matching items |
 
-`filter` and `find` accept type predicates to narrow discriminated unions:
+Good practices:
 
-```typescript
-const completed = this.state.filter("todos", (t): t is CompletedTodo => t.completed);
-// completed is CompletedTodo[], not Todo[]
+- **Prefer the array helpers over manual spreads.** `this.state.patch("todos", t => t.id === id, { done: true })` reads better and preserves references for unchanged items, which keeps re-renders minimal.
+- **Prefer `merge` or `batch` when setting several keys at once.** Subscribers get one notification instead of several.
+
+```ts
+// One notification, not three
+this.state.merge({ user, permissions, lastLogin: Date.now() });
 ```
 
-`computed` derives a value from one or more state paths and recomputes lazily when any dependency changes. Create it once (in the constructor or as a class field) and call `.get()` to read it:
+- **Use updaters when the next value depends on the previous one.** `this.state.set("count", prev => prev + 1)` is safe under batching; reading then writing is not.
+- **Do not store functions in state.** `set(path, fn)` always treats a function as an updater, so a function value would be called instead of stored. Store data; keep behavior in methods.
 
-```typescript
+### Computed values
+
+`computed(deps, fn)` derives a value from state. Reads are always fresh: `get()` compares the dependency values by reference and recomputes only when one of them changed. Create it once (as a class field or in the constructor) and call `.get()` to read:
+
+```ts
 class TodoStore extends SnapStore<State, never> {
   private remaining = this.state.computed(["todos"], (s) =>
     s.todos.filter((t) => !t.done).length
   );
 
-  getRemainingCount() {
+  get remainingCount() {
     return this.remaining.get();
   }
 }
 ```
 
-Call `.destroy()` to stop tracking if you need to tear it down early; otherwise it cleans up with the store.
-
-### Async operations (`this.api.*`)
-
-Tracked async operations use take-latest semantics by key: if a newer request starts for the same key, the older one stops updating status and state.
-
-All methods take a single params object. When `key` is provided, the operation is tracked via `getStatus(key)`. When `key` is omitted, the request runs without status tracking.
-
-| Method | Description |
-|---|---|
-| `fetch({ key?, fn })` | Run async function, optionally tracked. Returns the value from `fn`. |
-| `all({ key?, requests })` | Parallel requests, each stored at a target path |
-| `get({ key?, url, target?, fallback?, onSuccess?, onError? })` | GET request |
-| `post({ key?, url, body?, target?, onSuccess?, onError? })` | POST request |
-| `put` / `patch` / `delete` | Same params as `post` |
-
-Pass `target` to store the response directly at a state path, or `onSuccess` for custom handling. The two are mutually exclusive; `target` takes precedence. Pass `fallback` with `target` on `get` to set a default value on error (suppresses the error). When `onError` is provided, the error is handled and does not propagate to the caller -- unless `onError` itself throws, in which case the thrown error propagates. Without `onError`, errors are rethrown.
-
-**Status tracking:** `getStatus(key)` returns `{ status, error }` where `status` has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`. Call `resetStatus(key)` to return a single operation to `idle`, or `resetStatus()` with no arguments to reset all operations at once.
-
-```typescript
-// Reset a single operation (e.g. before a retry)
-store.resetStatus("fetchUsers");
-
-// Reset all operations (e.g. when the store is reused for a different context)
-store.resetStatus();
-```
-
-#### Parallel requests (`api.all`)
-
-Load multiple endpoints in parallel under a single tracked operation. Each request stores its response at the specified `target` path. Requests default to GET but support any HTTP method:
-
-```typescript
-async fetchDashboard() {
-  await this.api.all({ key: "dashboard", requests: [
-    { url: "/api/todos", target: "todos" },
-    { url: "/api/stats", target: "stats" },
-    { url: "/api/search", target: "results", method: "POST", body: { query: "active" } },
-  ]});
-}
-```
-
-Individual requests can have their own `onError` for per-request fallbacks. Requests with `onError` don't fail the batch:
-
-```typescript
-async loadSettings() {
-  await this.api.all({ key: "settings", requests: [
-    { url: "/api/teams", target: "teams" },
-    { url: "/api/credentials", target: "credStatus" },
-    { url: "/api/linear-teams", target: "linearTeams", onError: () => this.state.set("linearTeams", []) },
-  ]});
-}
-```
-
-Targets are type-safe: each must be a valid state path.
-
-#### Raw HTTP access (`this.http`)
-
-Use `this.http` inside `api.fetch` to make HTTP calls through the store's configured client without creating a separate tracked operation. `api.fetch` returns the value from `fn`:
-
-```typescript
-async refreshOrgCount(phaseId: string): Promise<number> {
-  const { count } = await this.api.fetch({ key: "refreshOrgCount", fn: async () =>
-    this.http.request<{ count: number }>(`/api/phases/${phaseId}/org-count`)
-  });
-  return count;
-}
-```
+Use `computed` for values that are expensive to derive or read from many places. For cheap one-liners, a getter that reads `this.state.get(...)` is simpler.
 
 ### Cross-store derivation (`this.derive`)
 
-Keep a local state key in sync with a value selected from another store. Subscribes to the source, applies an `Object.is` change guard, and cleans up on `destroy()`.
+Keep a local state key in sync with a value selected from another store. It subscribes to the source, skips no-op updates with `Object.is`, and cleans up on `destroy()`.
 
 ```ts
 class ProjectsStore extends SnapStore<{ companyId: string; projects: Project[] }, "fetch"> {
@@ -250,26 +189,126 @@ class ProjectsStore extends SnapStore<{ companyId: string; projects: Project[] }
 }
 ```
 
-The source accepts any `Subscribable` (every `SnapStore` satisfies this), so stores stay testable in isolation. Pass a real store or a minimal mock.
+The source is any `Subscribable` (every `SnapStore` qualifies), so in tests you can pass a minimal mock instead of a real store. Injecting the dependency through the constructor, as above, is the pattern to prefer: it keeps stores decoupled and testable.
 
 ### Public interface
 
 | Method | Description |
 |---|---|
-| `subscribe(callback)` | Subscribe to all changes. Returns unsubscribe function |
+| `subscribe(callback)` | Subscribe to all changes; returns an unsubscribe function |
 | `subscribe(path, callback)` | Subscribe to a specific path |
-| `getSnapshot()` | Current state (compatible with `useSyncExternalStore`) |
-| `getStatus(key)` | Operation status |
-| `resetStatus(key?)` | Reset operation to idle |
+| `getSnapshot()` | Current state, compatible with `useSyncExternalStore` |
+| `getStatus(key)` | Status of an async operation |
+| `resetStatus(key?)` | Reset one operation (or all) back to idle |
 | `destroy()` | Tear down subscriptions and derivations |
+
+## Async Operations
+
+The protected `this.api` accessor runs async work with automatic status tracking. Every method takes a single params object. With a `key`, the operation is tracked and readable via `getStatus(key)`; without one, it just runs.
+
+| Method | Description |
+|---|---|
+| `fetch({ key?, fn })` | Run any async function, optionally tracked. Returns the value from `fn`. |
+| `all({ key?, requests })` | Parallel requests, each stored at a target path |
+| `get({ key?, url, target?, fallback?, onSuccess?, onError? })` | GET request |
+| `post({ key?, url, body?, target?, onSuccess?, onError? })` | POST request |
+| `put` / `patch` / `delete` | Same params as `post` |
+
+### Storing responses: prefer `target`
+
+`target` writes the response straight to a state path, with the path checked against your state type. Prefer it whenever the response maps directly to state; reach for `onSuccess` only when you need to transform the response first.
+
+```ts
+// Preferred: response lands at a typed state path
+loadTodos() {
+  return this.api.get({ key: "load", url: "/api/todos", target: "todos" });
+}
+
+// When you need to reshape the data
+loadTodos() {
+  return this.api.get<ApiTodo[]>({
+    key: "load",
+    url: "/api/todos",
+    onSuccess: (rows) => this.state.set("todos", rows.map(toTodo)),
+  });
+}
+```
+
+Pass `fallback` alongside `target` on `get` to fall back to a default value when the request fails (the error is suppressed and the status still tracks it):
+
+```ts
+this.api.get({ key: "prefs", url: "/api/prefs", target: "prefs", fallback: defaultPrefs });
+```
+
+### Error handling
+
+When `onError` is provided, the error is considered handled and does not propagate to the caller. Without `onError`, the promise rejects, so `await` it inside a `try/catch` or attach `.catch()`. If `onError` itself throws, that error propagates.
+
+### Status tracking
+
+`getStatus(key)` returns `{ status, error }` where `status` has boolean flags: `isIdle`, `isLoading`, `isReady`, `isError`. The returned object is frozen and keeps a stable identity until the status changes, so it is safe to map directly into component props:
+
+```ts
+const SaveButton = store.connect(SaveButtonView, {
+  props: (s) => ({ saving: s.getStatus("save").status.isLoading }),
+});
+```
+
+`resetStatus(key)` returns one operation to idle; `resetStatus()` resets all of them. Resetting also marks in-flight operations for that key as superseded, so their results are ignored when they land (the underlying HTTP request is not aborted).
+
+### Take-latest semantics
+
+Tracked operations follow take-latest per key: when a newer call starts with the same key, the older call stops updating status and no longer writes its response to `target`. For GET requests, a superseded response is ignored entirely, callbacks included. For mutations (POST, PUT, PATCH, DELETE), the superseded call's `onSuccess` and `onError` callbacks still run, because a completed mutation usually needs acknowledgment even if a newer one follows.
+
+Take-latest does not debounce or cancel the HTTP request itself. Two rapid calls still send two requests; only the bookkeeping and state writes prefer the newer one. If double submission matters (a payment, a create), guard on status first:
+
+```ts
+save() {
+  if (this.getStatus("save").status.isLoading) return;
+  return this.api.post({ key: "save", url: "/api/save", body: this.state.get() });
+}
+```
+
+### Parallel requests (`api.all`)
+
+Load several endpoints under one tracked operation. Each response lands at its `target` path, written together in one batch when all requests finish:
+
+```ts
+async fetchDashboard() {
+  await this.api.all({ key: "dashboard", requests: [
+    { url: "/api/todos", target: "todos" },
+    { url: "/api/stats", target: "stats" },
+    { url: "/api/search", target: "results", method: "POST", body: { query: "active" } },
+  ]});
+}
+```
+
+A request with its own `onError` does not fail the batch; use it for optional data:
+
+```ts
+{ url: "/api/linear-teams", target: "linearTeams", onError: () => this.state.set("linearTeams", []) },
+```
+
+### Raw HTTP access (`this.http`)
+
+Use `this.http` inside `api.fetch` when you need the response value rather than a state write, without creating a second tracked operation:
+
+```ts
+async refreshOrgCount(phaseId: string): Promise<number> {
+  const result = await this.api.fetch({ key: "refreshOrgCount", fn: () =>
+    this.http.request<{ count: number }>(`/api/phases/${phaseId}/org-count`)
+  });
+  return result?.count ?? 0;
+}
+```
 
 ## React Integration
 
-`SnapStore` from `@thalesfp/snapstate/react` extends the core store with a `connect()` HOC.
+Import `SnapStore` from `@thalesfp/snapstate/react` to get `connect()` and `SnapStore.scoped()`.
 
-### connect()
+### Props mapping
 
-Use the shorthand form when you only need to map props. Pass the mapper function directly as the second argument:
+The shorthand form takes just a mapper. The component re-renders when the mapped values change (shallow equality):
 
 ```tsx
 const UserName = userStore.connect(
@@ -278,7 +317,7 @@ const UserName = userStore.connect(
 );
 ```
 
-Use the object form when you need lifecycle options (`fetch`, `setup`, `cleanup`, `loading`, `error`, `deps`):
+Use the object form when you need lifecycle options:
 
 ```tsx
 const UserProfile = userStore.connect(ProfileView, {
@@ -289,9 +328,9 @@ const UserProfile = userStore.connect(ProfileView, {
 });
 ```
 
-### Granular subscriptions
+### Granular subscriptions (`select`)
 
-For top-level keys, pass an array:
+Prefer `select` when the component needs specific fields: it subscribes to those paths only, so unrelated store changes never touch the component. For top-level keys, pass an array; each key becomes a prop:
 
 ```tsx
 const TodoApp = todoStore.connect(TodoView, {
@@ -310,13 +349,13 @@ const UserCard = userStore.connect(CardView, {
 });
 ```
 
-Both forms subscribe to the specified paths only, so the component re-renders only when those values change. `select` supports all lifecycle options (`fetch`, `setup`, `cleanup`, `loading`, `error`, `deps`).
+Paths are captured once when `connect` runs, so the `select` callback must always pick the same set of paths. No conditionals inside `select`; if you need dynamic selection, use the `props` mapper instead.
 
 ### Lifecycle
 
 ```tsx
 const Dashboard = dashboardStore.connect(DashboardView, {
-  props: (s) => ({ stats: s.getSnapshot().stats }),
+  select: ["stats"],
   setup: (s) => s.initPolling(),
   fetch: (s) => s.loadStats(),
   cleanup: (s) => s.stopPolling(),
@@ -326,15 +365,17 @@ const Dashboard = dashboardStore.connect(DashboardView, {
 
 | Option | When it runs | Typical use |
 |---|---|---|
-| `setup` | Before `fetch`, on mount (or when `deps` change) | Start timers, subscriptions, AbortControllers |
-| `fetch` | After `setup`, on mount (or when `deps` change) | Load data from the API |
-| `cleanup` | On unmount (or before re-running on `deps` change) | Stop timers, reset store state |
-| `loading` | While `fetch` is in progress | Render a spinner or skeleton |
-| `error` | When `fetch` fails | Render an error message |
+| `setup` | Before `fetch`, on mount (or when `deps` change) | Start timers, subscriptions |
+| `fetch` | After `setup`, on mount (or when `deps` change) | Load data |
+| `cleanup` | On unmount (or before re-running on `deps` change) | Stop timers, reset state |
+| `loading` | While `fetch` is in progress | Spinner or skeleton |
+| `error` | When `fetch` fails | Error message |
 
 All lifecycle options are safe in React StrictMode.
 
-### Dependencies
+### Dependencies (`deps`)
+
+Return a dependency array from the component's own props (and URL params, if configured). When a value changes, `cleanup` runs, then `setup` and `fetch` re-run:
 
 ```tsx
 const ProjectDetail = projectStore.connect(ProjectView, {
@@ -346,39 +387,26 @@ const ProjectDetail = projectStore.connect(ProjectView, {
 });
 ```
 
-`deps` returns a dependency array from the component's own props (and optionally URL params; see [URL Parameters](#url-parameters)). When values change, `cleanup` runs for the previous deps, then `fetch` and `setup` re-run. Without `deps`, lifecycle callbacks run once on mount.
+Return primitives from `deps` (`[props.id]`, `[params.filter]`). Returning a fresh object or the whole `params` object makes every render look like a change and refetches in a loop.
 
 ### Template
 
-Wrap the connected component in a layout that also receives store-derived props:
+Wrap the connected component in a layout that receives the same mapped props plus `children`:
 
 ```tsx
-function TodoLayout({ remaining, children }: { remaining: number; children: React.ReactNode }) {
-  return (
-    <div className="app">
-      <h1>Todos ({remaining})</h1>
-      {children}
-    </div>
-  );
-}
-
-function TodoAppInner({ remaining }: { remaining: number }) {
-  return <p>{remaining} items left</p>;
-}
-
 const TodoApp = todoStore.connect(TodoAppInner, {
   select: ["remaining"],
   fetch: (s) => s.loadTodos(),
-  template: TodoLayout,
+  template: TodoLayout, // receives { remaining, children }
   loading: () => <Skeleton />,
 });
 ```
 
-The `template` component receives the same mapped props as the inner component, plus `children` (the rendered inner component). It renders after fetch guards, so `children` is always the ready component. Works with `props`, `select`, and `scoped`.
+The template renders after the fetch guards, so `children` is always the ready component.
 
 ### Scoped stores
 
-`SnapStore.scoped()` creates a store when the component mounts and destroys it on unmount, giving each instance its own isolated state. Use it for detail views, forms, or modals that need fresh state on every mount.
+`SnapStore.scoped()` creates the store when the component mounts and destroys it on unmount. **Prefer it whenever the store is used by exactly one component**: detail views, modals, wizards, editors. Each mount gets clean state, and there is nothing to reset or clean up manually.
 
 ```tsx
 import { SnapStore } from "@thalesfp/snapstate/react";
@@ -402,11 +430,11 @@ const TodoDetail = SnapStore.scoped(TodoDetailView, {
 });
 ```
 
-No manual `cleanup` or `reset()` needed. `destroy()` runs automatically on unmount. All lifecycle options (`setup`, `cleanup`, `fetch`, `deps`, `loading`, `error`) work the same as in `connect`.
+`destroy()` runs automatically on unmount. All lifecycle options work the same as in `connect`. If two mounted components ever need to see the same data, switch to a shared singleton instead.
 
 ## Forms
 
-`SnapFormStore<V, K>` extends `SnapStore`. Available from `@thalesfp/snapstate/form`. Requires `zod` peer dependency.
+`SnapFormStore<V, K>` extends the React store with Zod validation, DOM binding, and a submit lifecycle. Import from `@thalesfp/snapstate/form`; requires `zod >= 4`.
 
 ```ts
 import { SnapFormStore } from "@thalesfp/snapstate/form";
@@ -426,101 +454,97 @@ class LoginStore extends SnapFormStore<LoginValues, "login"> {
 
   login() {
     return this.submit("login", async (values) => {
-      await this.api.post({ key: "login", url: "/api/login", body: values });
+      await this.http.request("/api/login", { method: "POST", body: values });
     });
   }
 }
 ```
 
-### register()
+Inside a `submit` handler, use `this.http` for the request. The submit itself is already tracked under the key, so calling `this.api.*` with the same key would double-track it.
 
-Returns props to spread onto form elements. Handles ref tracking, value sync, and event binding:
+### Binding inputs with `register()`
+
+`register(field)` returns props to spread onto native inputs. It handles refs, value sync, and event binding for text, number, checkbox, radio, textarea, select (including multiple), range, date/time, and file inputs:
 
 ```tsx
 const loginStore = new LoginStore();
 
-function LoginFormView({ errors }: { errors: FormErrors<LoginValues> }) {
+function LoginFormView({ errors, submitting }: {
+  errors: FormErrors<LoginValues>;
+  submitting: boolean;
+}) {
   return (
-    <form onSubmit={(e) => { e.preventDefault(); loginStore.login(); }}>
+    <form onSubmit={(e) => { e.preventDefault(); loginStore.login()?.catch(() => {}); }}>
       <input {...loginStore.register("email")} />
       {errors.email && <span>{errors.email[0]}</span>}
 
       <input type="password" {...loginStore.register("password")} />
       {errors.password && <span>{errors.password[0]}</span>}
 
-      <button type="submit">Log in</button>
+      <button type="submit" disabled={submitting}>Log in</button>
     </form>
   );
 }
 
 export const LoginForm = loginStore.connect(LoginFormView, (s) => ({
   errors: s.errors,
+  submitting: s.getStatus("login").status.isLoading,
 }));
 ```
 
+Two practices worth copying from this example:
+
+- **Disable the submit button while submitting.** Submissions are not deduplicated automatically; a double click sends two requests.
+- **Handle the promise from `submit()`.** It rejects when the handler throws. Await it in a `try/catch`, or attach `.catch()` and read the outcome from `submitStatus` in state.
+
 ### Validation modes
 
-| Mode | Behavior |
-|---|---|
-| `onSubmit` | Validate only when `submit()` is called (default) |
-| `onBlur` | Validate field on blur |
-| `onChange` | Validate field on every change |
+| Mode | Behavior | Choose it when |
+|---|---|---|
+| `onSubmit` (default) | Validate only when `submit()` runs | Short forms; least noisy |
+| `onBlur` | Validate a field when it loses focus | Most forms; errors appear once the user finishes a field |
+| `onChange` | Validate on every keystroke | Live feedback fields such as password strength |
 
 ### Form methods
 
 | Method | Description |
 |---|---|
-| `register(field)` | Props for form elements: `ref`, `name`, `onBlur`, `onChange`, and `defaultValue` (or `defaultChecked` for boolean fields) |
-| `setValue(field, value)` | Set field value |
-| `getValue(field)` | Get current field value (reads from DOM ref if registered) |
-| `getValues()` | Get all current values |
-| `validate()` | Validate full form, returns parsed data or `null` |
-| `validateField(field)` | Validate single field |
-| `submit(key, handler)` | Validate then call handler with async status tracking. Use `this.http` for HTTP calls inside the handler -- `api.*` methods cause double status tracking. |
-| `reset()` | Reset to initial values |
-| `clear()` | Clear to type-appropriate zero values |
-| `setInitialValues(values)` | Update initial values |
-| `isDirty` / `isFieldDirty(field)` | Dirty tracking (supports Date and array equality) |
-| `errors` / `isValid` | Field-level error arrays |
-
-Supported elements: text inputs, number, checkbox, textarea, select, range, radio, date/time/datetime-local, select multiple, and file inputs.
+| `register(field)` | Props for form elements |
+| `setValue(field, value)` | Set a value programmatically and sync the DOM |
+| `getValue(field)` / `getValues()` | Current values, including unsynced DOM input |
+| `validate()` | Full-schema validation; returns parsed values or `null` |
+| `validateField(field)` | Validate one field |
+| `submit(key, handler)` | Validate, then run the handler with status tracking |
+| `reset()` | Back to initial values; clears errors and submit status |
+| `clear()` | Empty every field to a type-appropriate zero value |
+| `setInitialValues(values)` | Replace initial values (e.g. after loading from an API) |
+| `isDirty` / `isFieldDirty(field)` | Dirty tracking with Date and array-aware equality |
+| `errors` / `isValid` | Per-field error arrays and overall validity |
 
 ## URL Parameters
 
-`@thalesfp/snapstate/url` provides reactive URL search parameter reading and writing.
+`@thalesfp/snapstate/url` reads and writes URL search params reactively.
 
 ### Reading URL params
 
-`createUrlParams<T>()` returns a typed `Subscribable` that parses `window.location.search`. It detects navigation via `popstate` and by patching `history.pushState` and `history.replaceState` globally, since the browser does not fire `popstate` for those.
+`createUrlParams<T>()` returns a typed `Subscribable` over `window.location.search`. It reacts to `popstate` and to SPA navigation (it patches `history.pushState`/`replaceState`, which do not fire events natively).
 
 ```ts
 import { createUrlParams } from "@thalesfp/snapstate/url";
 
-const urlParams = createUrlParams<{ filter?: string; page?: string }>();
+export const urlParams = createUrlParams<{ filter?: string; page?: string }>();
 
 urlParams.getSnapshot(); // { filter: "active", page: "2" } from ?filter=active&page=2
 ```
 
-Use it with `derive()` to sync URL params into store state:
-
-```ts
-class AppStore extends SnapStore<{ filter: string }> {
-  constructor() {
-    super({ filter: "all" });
-    this.derive("filter", urlParams, (p) => (p.filter as string) ?? "all");
-  }
-}
-```
-
-Or pass it to `connect()` so `fetch`, `setup`, and `deps` receive typed params automatically:
+The preferred integration is the `urlParams` connect option, which passes typed params to `fetch`, `setup`, and `deps` and re-runs them on navigation:
 
 ```tsx
 const TodoApp = todoStore.connect(TodoAppView, {
-  props: (s) => ({ todos: s.filteredTodos }),
+  select: ["todos"],
   urlParams,
   fetch: (store, props, params) => {
-    // params.filter is typed as string | undefined
-    if (params.filter) store.setFilter(params.filter);
+    store.setFilter(params.filter ?? "all");
     return store.loadTodos();
   },
   deps: (props, params) => [params.filter],
@@ -528,56 +552,42 @@ const TodoApp = todoStore.connect(TodoAppView, {
 });
 ```
 
+To keep a param permanently mirrored in store state instead, use `derive`:
+
+```ts
+this.derive("filter", urlParams, (p) => (typeof p.filter === "string" ? p.filter : "all"));
+```
+
 ### Writing state to URL
 
-`syncToUrl()` subscribes to a store and mirrors selected state into URL search params:
+`syncToUrl()` mirrors selected state into the search string on every store change:
 
 ```ts
 import { syncToUrl } from "@thalesfp/snapstate/url";
 
 const unsub = syncToUrl(todoStore, {
-  params: {
-    filter: (s) => s.filter,
-    page: (s) => s.page,
-  },
-  history: "replace", // default; use "push" for back-button navigation
+  params: { filter: (s) => s.filter, page: (s) => s.page },
+  history: "replace", // default; "push" adds history entries for back-button support
 });
 ```
 
-Empty, null, and undefined values are omitted from the URL. The subscriber skips `qs.stringify` entirely when the tracked params haven't changed.
-
-### Parsing features
-
-Powered by `qs`, supports nested objects, arrays, dot notation, and depth/parameter limits:
-
-```
-?user[name]=John          → { user: { name: "John" } }
-?colors[]=red&colors[]=blue → { colors: ["red", "blue"] }
-?user.name=John           → { user: { name: "John" } }
-```
+Empty, `null`, and `undefined` values are omitted from the URL. Call the returned function to stop syncing; call `urlParams.destroy()` to remove navigation listeners.
 
 ### Options
 
 ```ts
 createUrlParams({
-  initialParams: { filter: "all" },  // SSR/testing (bypass window)
-  listen: true,                       // Listen to navigation events (default: true in browser)
-  depth: 5,                           // Max nesting depth (default: 5)
-  parameterLimit: 1000,               // Max params to parse (default: 1000)
-  arrayFormat: "brackets",            // "brackets" | "indices" | "comma" | "repeat"
+  initialParams: { filter: "all" }, // SSR and tests: skip window access
+  listen: true,                     // react to navigation (default: true in browser)
+  depth: 5,                         // max nesting depth for parsed objects
+  parameterLimit: 1000,             // max number of params parsed
+  arrayFormat: "brackets",          // "brackets" | "indices" | "comma" | "repeat"
 });
 ```
 
-### Cleanup
+## HTTP Client and Testing
 
-```ts
-urlParams.destroy();  // Remove event listeners
-unsub();              // Stop syncing to URL (return value of syncToUrl)
-```
-
-## Custom HTTP Client
-
-By default, snapstate uses the native `fetch` API, sets no auth headers, and throws on non-2xx responses. Override it globally with `setHttpClient`, or per-store via constructor options. `setDefaultHeaders` works with both the default and custom clients -- headers are merged at the API method level before reaching the client.
+The default client uses native `fetch`, JSON-serializes bodies, throws on non-2xx responses, and extracts `error`/`message` fields from JSON error bodies. Swap it globally with `setHttpClient`:
 
 ```ts
 import { setHttpClient } from "@thalesfp/snapstate";
@@ -596,19 +606,48 @@ setHttpClient({
 });
 ```
 
-Pass `httpClient` via constructor options to override the global client for that store only. Useful for testing:
+`setDefaultHeaders({ Authorization: ... })` merges headers into every request and works with both the default and custom clients. Both settings are module-level globals: fine in the browser, but on a server that renders for many users, do not put per-user tokens in them. Use a per-store client there instead.
 
-```typescript
+### Testing stores
+
+Stores test without React. Inject a mock client through constructor options and call methods directly:
+
+```ts
 const mockClient: HttpClient = {
-  async request(url) { return { id: "1", name: "Test" }; },
+  async request() {
+    return [{ id: "1", text: "Test", done: false }];
+  },
 };
 
-const store = new UserStore({ httpClient: mockClient });
+test("loadTodos stores the response", async () => {
+  const store = new TodoStore({ httpClient: mockClient });
+
+  await store.loadTodos();
+
+  expect(store.getSnapshot().todos).toHaveLength(1);
+  expect(store.getStatus("load").status.isReady).toBe(true);
+});
 ```
+
+This is the payoff of keeping logic in stores: business rules, async flows, and error states are all testable with plain unit tests.
+
+## Best Practices Summary
+
+- Keep business logic in store methods; components call methods and render state.
+- One shared store instance per domain, exported from a module. `scoped()` for stores used by a single view.
+- Prefer `select` for subscriptions; use the `props` mapper for derived values.
+- Prefer `target` for storing responses; `onSuccess` only to transform first.
+- One `key` per user-visible operation; drive loading and error UI from `getStatus(key)`.
+- Return primitives from `deps`.
+- Guard mutations against double submission with `getStatus(key).status.isLoading`.
+- Await (or `.catch()`) promises from `api.*` and `submit()` unless an `onError` handles them.
+- Batch multi-key writes with `merge` or `batch`.
+- Inject dependencies (other stores, `httpClient`) through constructors to keep stores testable.
+- Do not store functions in state.
 
 ## Example App
 
-A full Vite + React 19 demo lives in [`example/`](./example/) and shows shared stores, scoped detail views, form submission, auth state, and URL-backed todo filters.
+A full Vite + React 19 demo lives in [`example/`](./example/): shared stores, scoped detail views, form submission, auth state, and URL-backed todo filters.
 
 ```bash
 npm run build            # Build the library used by the example
@@ -624,6 +663,7 @@ npm run example:dev      # Start the Vite app and mock API together
 - [React Integration](./docs/react-integration.md)
 - [Async & HTTP](./docs/async-http.md)
 - [Forms](./docs/forms.md)
+- [URL Parameters](./docs/url-params.md)
 - [Advanced Topics](./docs/advanced.md)
 
 ## Benchmarks
