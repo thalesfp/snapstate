@@ -83,7 +83,18 @@ export const TodoList = todoStore.connect(TodoListView, {
   loading: () => <p>Loading...</p>,
   error: ({ error }) => <p>Error: {error}</p>,
 });
+
+// 4. Any other component can share the same store, no prop drilling
+function TodoCountView({ todos }: { todos: State["todos"] }) {
+  return <p>{todos.filter((t) => !t.done).length} remaining</p>;
+}
+
+export const TodoCount = todoStore.connect(TodoCountView, {
+  select: ["todos"],
+});
 ```
+
+`TodoList` and `TodoCount` share one store instance, which is why it lives at module level. If only one component ever used this store, you would create it with [`SnapStore.scoped()`](#scoped-stores) instead; the [next section](#choosing-the-right-tool) covers how to choose.
 
 ## Choosing the Right Tool
 
