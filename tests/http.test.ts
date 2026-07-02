@@ -657,6 +657,29 @@ describe("take-latest guards state mutations", () => {
     expect(store.snapshot().name).toBe("new-value");
   });
 
+  it("stale api.post with target does not overwrite state", async () => {
+    let resolveOld: (v: unknown) => void = () => {};
+    let resolveNew: (v: unknown) => void = () => {};
+
+    const mockClient: HttpClient = {
+      request: vi.fn()
+        .mockReturnValueOnce(new Promise((r) => { resolveOld = r; }))
+        .mockReturnValueOnce(new Promise((r) => { resolveNew = r; })),
+    };
+    const store = new RaceStore({ name: "", items: [] }, { httpClient: mockClient });
+
+    const oldCall = store.api.post({ key: "op", url: "/api/name", body: {}, target: "name" });
+    const newCall = store.api.post({ key: "op", url: "/api/name", body: {}, target: "name" });
+
+    resolveNew("new-value");
+    await newCall;
+    expect(store.snapshot().name).toBe("new-value");
+
+    resolveOld("old-value");
+    await oldCall;
+    expect(store.snapshot().name).toBe("new-value");
+  });
+
   it("overlapping api.post with same key both call onSuccess", async () => {
     let resolveFirst!: (v: unknown) => void;
     let resolveSecond!: (v: unknown) => void;

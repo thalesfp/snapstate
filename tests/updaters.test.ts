@@ -234,19 +234,21 @@ describe("array methods", () => {
   });
 
   describe("getStatus immutability", () => {
-    it("returns a new object each call so mutations do not affect store", async () => {
+    it("returns a frozen object so mutations cannot affect the store", async () => {
       const store = new TestStore({ nums: [], items: [], label: "" });
       const s1 = store.getStatus("load");
-      (s1 as any).status = "loading";
+      expect(Object.isFrozen(s1)).toBe(true);
+      expect(() => { (s1 as any).status = "loading"; }).toThrow(TypeError);
       const s2 = store.getStatus("load");
       expect(s2.status.isIdle).toBe(true);
     });
 
-    it("does not leak internal reference after fetch", async () => {
+    it("cannot corrupt internal state after fetch", async () => {
       const store = new TestStore({ nums: [], items: [], label: "" });
       await store.doFetch("load", async () => {});
       const s1 = store.getStatus("load");
-      (s1 as any).status = "error";
+      expect(Object.isFrozen(s1)).toBe(true);
+      expect(() => { (s1 as any).status = "error"; }).toThrow(TypeError);
       const s2 = store.getStatus("load");
       expect(s2.status.isReady).toBe(true);
     });

@@ -11,9 +11,11 @@ import type {
   DotPaths,
   GetByPath,
   HttpMethod,
+  AsyncStatusValue,
 } from "./types.js";
 import { asyncStatus } from "./types.js";
 import { createStore } from "./store.js";
+import { storedValue } from "./structural.js";
 
 interface SendParams<K> {
   key?: K;
@@ -25,7 +27,13 @@ interface SendParams<K> {
   onError?: (error: Error) => void;
 }
 
-const IDLE_STATE: OperationState = { status: asyncStatus("idle"), error: null };
+// Frozen so getStatus can hand out the stored object directly (stable identity,
+// no defensive copy) without callers being able to corrupt internal state.
+function operationState(status: AsyncStatusValue, error: string | null = null): OperationState {
+  return Object.freeze({ status: asyncStatus(status), error });
+}
+
+const IDLE_STATE: OperationState = operationState("idle");
 const HANDLED = Symbol("handled");
 
 const defaultHttpClient: HttpClient = {
@@ -92,40 +100,34 @@ export class SnapStore<T extends object, K extends string = string> {
     const resolveClient = (): HttpClient => this.http;
 
     // takeLatest semantic: if a newer call starts for the same key, the older
-    // call's promise resolves silently (no reject, no state update).
-    const doTracked = async <R>(key: K, fn: () => Promise<R>): Promise<R | undefined> => {
+    // call's promise resolves silently (no reject, no state update). The `stale`
+    // predicate passed to `fn` reports whether this call has been superseded, so
+    // every tracked operation guards its state writes the same way.
+    const doTracked = async <R>(key: K, fn: (stale: () => boolean) => Promise<R>): Promise<R | undefined> => {
       const gen = (generations.get(key) ?? 0) + 1;
       generations.set(key, gen);
-      operations.set(key, { status: asyncStatus("loading"), error: null });
+      const stale = (): boolean => generations.get(key) !== gen;
+      operations.set(key, operationState("loading"));
       store.notify();
       try {
-        const result = await fn();
-        if (generations.get(key) !== gen) { return undefined; }
-        operations.set(key, { status: asyncStatus("ready"), error: null });
+        const result = await fn(stale);
+        if (stale()) { return undefined; }
+        operations.set(key, operationState("ready"));
         store.notify();
         return result;
       } catch (e) {
-        if (generations.get(key) !== gen) { return undefined; }
-        operations.set(key, {
-          status: asyncStatus("error"),
-          error: e instanceof Error ? e.message : "Unknown error",
-        });
+        if (stale()) { return undefined; }
+        operations.set(key, operationState("error", e instanceof Error ? e.message : "Unknown error"));
         store.notify();
         throw e;
       }
     };
 
-    const runOrTrack = async <R>(key: K | undefined, fn: () => Promise<R>): Promise<R | undefined> => {
+    const runOrTrack = async <R>(key: K | undefined, fn: (stale: () => boolean) => Promise<R>): Promise<R | undefined> => {
       if (key !== undefined) {
         return doTracked(key, fn);
       }
-      return fn();
-    };
-
-    const captureGen = (key: K | undefined): (() => boolean) => {
-      if (key === undefined) { return () => false; }
-      const gen = generations.get(key);
-      return () => generations.get(key) !== gen;
+      return fn(() => false);
     };
 
     const mergeHeaders = (headers?: Record<string, string>): Record<string, string> | undefined => {
@@ -156,7 +158,7 @@ export class SnapStore<T extends object, K extends string = string> {
     };
 
     const doSend = async (method: string, params: SendParams<K>): Promise<void> => {
-      await swallowIfHandled(params, (rethrown) => runOrTrack(params.key, async () => {
+      await swallowIfHandled(params, (rethrown) => runOrTrack(params.key, async (stale) => {
         try {
           const data = await resolveClient().request(params.url, {
             method,
@@ -164,7 +166,11 @@ export class SnapStore<T extends object, K extends string = string> {
             headers: mergeHeaders(params.headers),
           });
           if (typeof params.target === "string") {
-            store.set(params.target as never, data as never);
+            // A superseded mutation must not clobber target state written by a
+            // newer call with the same key; its callbacks still fire.
+            if (!stale()) {
+              store.set(params.target as never, storedValue(data) as never);
+            }
           } else {
             params.onSuccess?.(data);
           }
@@ -177,8 +183,7 @@ export class SnapStore<T extends object, K extends string = string> {
 
     const doGet = async (params: SendParams<K> & { fallback?: unknown }): Promise<void> => {
       const hasFallback = "fallback" in params;
-      await swallowIfHandled({ ...params, suppress: hasFallback }, (rethrown) => runOrTrack(params.key, async () => {
-        const stale = captureGen(params.key);
+      await swallowIfHandled({ ...params, suppress: hasFallback }, (rethrown) => runOrTrack(params.key, async (stale) => {
         try {
           const data = await resolveClient().request(params.url, {
             method: "GET",
@@ -186,14 +191,14 @@ export class SnapStore<T extends object, K extends string = string> {
           });
           if (stale()) { return; }
           if (typeof params.target === "string") {
-            store.set(params.target as never, data as never);
+            store.set(params.target as never, storedValue(data) as never);
           } else {
             params.onSuccess?.(data);
           }
         } catch (e) {
           if (stale()) { return; }
           if ("fallback" in params && typeof params.target === "string") {
-            store.set(params.target as never, params.fallback as never);
+            store.set(params.target as never, storedValue(params.fallback) as never);
           }
           callOnError(params.onError, e, rethrown);
           throw e;
@@ -212,7 +217,8 @@ export class SnapStore<T extends object, K extends string = string> {
       merge: (updates) => {
         store.batch(() => {
           for (const key of Object.keys(updates)) {
-            store.set(key as never, (updates as Record<string, unknown>)[key] as never);
+            const value = (updates as Record<string, unknown>)[key];
+            store.set(key as never, storedValue(value) as never);
           }
         });
       },
@@ -285,8 +291,7 @@ export class SnapStore<T extends object, K extends string = string> {
         return runOrTrack(params.key, params.fn);
       },
       all: async (params: { key?: K; requests: Array<{ url: string; target: string; method?: HttpMethod; body?: unknown; headers?: Record<string, string>; onError?: (error: Error) => void }>; onError?: (error: Error) => void }) => {
-        await swallowIfHandled(params, (rethrown) => runOrTrack(params.key, async () => {
-          const stale = captureGen(params.key);
+        await swallowIfHandled(params, (rethrown) => runOrTrack(params.key, async (stale) => {
           let batchFailed = false;
           try {
             const results = await Promise.all(
@@ -312,7 +317,7 @@ export class SnapStore<T extends object, K extends string = string> {
             store.batch(() => {
               params.requests.forEach((req, i) => {
                 if (results[i] !== HANDLED) {
-                  store.set(req.target as never, results[i] as never);
+                  store.set(req.target as never, storedValue(results[i]) as never);
                 }
               });
             });
@@ -348,9 +353,11 @@ export class SnapStore<T extends object, K extends string = string> {
     return this._store.getSnapshot();
   };
 
-  /** Get the async status of an operation by key. Returns `idle` if never started. */
+  /** Get the async status of an operation by key. Returns `idle` if never started.
+   *  The returned object is frozen and keeps a stable identity until the status
+   *  changes, so it is safe to use in `connect()` prop mappings. */
   getStatus(key: K): OperationState {
-    return { ...(this._operations.get(key) ?? IDLE_STATE) };
+    return this._operations.get(key) ?? IDLE_STATE;
   }
 
   /** Reset operation status to `idle`. With a key, resets that operation; without, resets all. */
@@ -383,7 +390,7 @@ export class SnapStore<T extends object, K extends string = string> {
     let previousValue: GetByPath<T, P> = selector(source.getSnapshot());
 
     if (!Object.is(previousValue, this.state.get(localKey))) {
-      this.state.set(localKey, previousValue);
+      this.state.set(localKey, storedValue(previousValue));
     }
 
     const unsub = source.subscribe(() => {
@@ -392,7 +399,7 @@ export class SnapStore<T extends object, K extends string = string> {
         return;
       }
       previousValue = nextValue;
-      this.state.set(localKey, nextValue);
+      this.state.set(localKey, storedValue(nextValue));
     });
 
     this._derivedUnsubs.push(unsub);
