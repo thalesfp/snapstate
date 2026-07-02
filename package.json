@@ -90,5 +90,8 @@
   ],
   "dependencies": {
     "qs": "^6.15.0"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1"
   }
 }
