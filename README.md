@@ -22,16 +22,31 @@ Skip it when local component state and a few hooks are enough.
 
 ## Packages
 
-Install only what you need; every package pulls in `@snapstore/core` automatically.
+Snapstore ships as four focused packages — install only the ones your app needs. `@snapstore/react`, `@snapstore/form`, and `@snapstore/url` each depend on `@snapstore/core`, so it comes along automatically; install `@snapstore/core` on its own only if you want the framework-free core.
 
-| Package | What you get | Peer deps |
-|---|---|---|
-| `@snapstore/core` | Core `SnapStore`, `createStore`, types, `setHttpClient` | None |
-| `@snapstore/react` | `SnapStore` with `connect()` and `SnapStore.scoped()` | `react >= 18` |
-| `@snapstore/form` | `SnapFormStore` with Zod validation and submit lifecycle | `react >= 18`, `zod >= 4` |
-| `@snapstore/url` | `createUrlParams`, `syncToUrl` for URL search params | None |
+**`@snapstore/core`** — the framework-free store: `SnapStore`, `createStore`, types, `setHttpClient`. No peer dependencies.
 
-`@snapstore/react` and `@snapstore/form` need React as a peer dependency; `@snapstore/form` also needs Zod. `@snapstore/url` depends on `qs`, installed automatically.
+```bash
+npm install @snapstore/core
+```
+
+**`@snapstore/react`** — React integration: `SnapStore` with `connect()` and `SnapStore.scoped()`. Requires `react >= 18` in your app.
+
+```bash
+npm install @snapstore/react
+```
+
+**`@snapstore/form`** — `SnapFormStore` with Zod validation and a submit lifecycle. Builds on `@snapstore/react` (pulled in automatically); requires `react >= 18` and `zod >= 4` in your app.
+
+```bash
+npm install @snapstore/form
+```
+
+**`@snapstore/url`** — reactive URL search params via `createUrlParams` and `syncToUrl`. Depends on `qs`, installed automatically.
+
+```bash
+npm install @snapstore/url
+```
 
 ## Quick Start
 

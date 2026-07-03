@@ -9,23 +9,31 @@ Snapstore is a state management library for React built around class-based store
 
 ## Installation
 
+Snapstore ships as four focused packages — install only the ones you need. `@snapstore/react`, `@snapstore/form`, and `@snapstore/url` each pull in `@snapstore/core` automatically.
+
+**`@snapstore/core`** — framework-free core store. No peer dependencies.
+
+```bash
+npm install @snapstore/core
+```
+
+**`@snapstore/react`** — React integration: `connect()` and `SnapStore.scoped()`. Requires `react >= 18`.
+
 ```bash
 npm install @snapstore/react
 ```
 
-Every package pulls in `@snapstore/core` automatically. Peer dependencies, per package:
+**`@snapstore/form`** — Zod-based form stores. Builds on `@snapstore/react` (pulled in automatically); requires `react >= 18` and `zod >= 4`.
 
-- `react >= 18` for `@snapstore/react` and `@snapstore/form`
-- `zod >= 4` for `@snapstore/form`
+```bash
+npm install @snapstore/form
+```
 
-## Packages
+**`@snapstore/url`** — reactive URL search params via `createUrlParams` and `syncToUrl`. Depends on `qs`, installed automatically.
 
-| Package | Use case |
-| --- | --- |
-| `@snapstore/core` | Core store, no React dependency |
-| `@snapstore/react` | React integration: `connect()` and `SnapStore.scoped()` |
-| `@snapstore/form` | Zod-based form stores |
-| `@snapstore/url` | Reactive URL search params |
+```bash
+npm install @snapstore/url
+```
 
 ## Quick Example
 
