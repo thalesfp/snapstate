@@ -5,7 +5,7 @@ description: Dot-path state access, subscriptions, structural sharing, and batch
 
 # Core Concepts
 
-Four ideas explain how Snapstate behaves: dot-path access, path-aware subscriptions, structural sharing, and batched notifications. Everything else builds on these.
+Four ideas explain how Snapstore behaves: dot-path access, path-aware subscriptions, structural sharing, and batched notifications. Everything else builds on these.
 
 ## Dot-Path State Access
 
@@ -32,7 +32,7 @@ class AppStore extends SnapStore<AppState> {
 }
 ```
 
-Array elements are addressed with numeric segments: `"items.0.title"`. When a path is written into a container that does not exist yet, Snapstate creates it: an array when the missing segment is a numeric index, an object otherwise.
+Array elements are addressed with numeric segments: `"items.0.title"`. When a path is written into a container that does not exist yet, Snapstore creates it: an array when the missing segment is a numeric index, an object otherwise.
 
 ## Subscriptions
 

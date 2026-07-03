@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyUpdate, getAtPath } from "../src/core/structural.js";
+import { applyUpdate, getAtPath } from "../packages/core/src/structural.js";
 
 describe("structural sharing", () => {
   describe("applyUpdate", () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SnapStore } from "../src/core/base.js";
+import { SnapStore } from "@snapstore/core";
 
 interface TestState {
   nums: number[];

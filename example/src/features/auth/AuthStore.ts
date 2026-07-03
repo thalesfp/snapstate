@@ -1,4 +1,4 @@
-import { SnapStore } from "snapstate/react";
+import { SnapStore } from "@snapstore/react";
 import type { User } from "../../shared/types";
 
 type AuthOp = "login" | "restore";

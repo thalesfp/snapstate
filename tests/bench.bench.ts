@@ -2,12 +2,12 @@
  * @vitest-environment jsdom
  */
 import { bench, describe } from "vitest";
-import { createStore } from "../src/core/store.js";
-import { SubscriptionTrie } from "../src/core/trie.js";
-import { applyUpdate } from "../src/core/structural.js";
+import { createStore } from "@snapstore/core";
+import { SubscriptionTrie } from "@snapstore/core";
+import { applyUpdate } from "../packages/core/src/structural.js";
 import { render, act } from "@testing-library/react";
 import { createElement } from "react";
-import { SnapStore } from "../src/react/index.js";
+import { SnapStore } from "@snapstore/react";
 
 // ---------------------------------------------------------------------------
 // Helpers

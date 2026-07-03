@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { createStore } from "../src/core/store.js";
-import { SnapStore, setHttpClient } from "../src/index.js";
+import { createStore } from "@snapstore/core";
+import { SnapStore, setHttpClient } from "@snapstore/core";
 
 describe("Store", () => {
   it("reads initial state", () => {

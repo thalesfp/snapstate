@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { accountStore } from "../../stores";
-import type { OperationState } from "snapstate/react";
+import type { OperationState } from "@snapstore/react";
 
 function ProfilePageInner({
   nameError,

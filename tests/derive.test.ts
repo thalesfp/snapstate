@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { SnapStore } from "../src/core/base.js";
-import type { Subscribable } from "../src/core/types.js";
+import { SnapStore } from "@snapstore/core";
+import type { Subscribable } from "@snapstore/core";
 
 class SourceStore extends SnapStore<{ value: number; other: string }> {
   setValue(v: number) {

@@ -1,5 +1,5 @@
-import { setDefaultHeaders } from "snapstate/react";
-import { setDefaultHeaders as setFormDefaultHeaders } from "snapstate/form";
+import { setDefaultHeaders } from "@snapstore/react";
+import { setDefaultHeaders as setFormDefaultHeaders } from "@snapstore/form";
 import { authStore } from "../stores";
 
 export function setupHttpClient() {

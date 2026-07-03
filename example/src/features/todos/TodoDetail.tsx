@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { SnapStore } from "snapstate/react";
+import { SnapStore } from "@snapstore/react";
 import { TodoDetailStore } from "./TodoDetailStore";
 import { TodoDetailLayout } from "./TodoDetailLayout";
 import { TodoDetailError } from "./TodoDetailError";

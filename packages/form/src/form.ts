@@ -1,8 +1,6 @@
 import { z } from "zod";
-import { ReactSnapStore } from "../react/store.js";
-import { asyncStatus } from "../core/types.js";
-import { storedValue } from "../core/structural.js";
-import type { OperationState } from "../core/types.js";
+import { SnapStore as ReactSnapStore } from "@snapstore/react";
+import { asyncStatus, storedValue, type OperationState } from "@snapstore/core";
 
 /** When to run field validation: on form submit, on field blur, or on every change. */
 export type ValidationMode = "onSubmit" | "onBlur" | "onChange";

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { setHttpClient, type HttpClient } from "snapstate/form";
+import { setHttpClient, type HttpClient } from "@snapstore/form";
 import { AuthStore } from "../auth/AuthStore";
 import { AccountStore } from "./AccountStore";
 

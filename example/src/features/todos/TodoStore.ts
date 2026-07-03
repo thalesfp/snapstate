@@ -1,5 +1,5 @@
-import { SnapStore } from "snapstate/react";
-import type { Subscribable } from "snapstate";
+import { SnapStore } from "@snapstore/react";
+import type { Subscribable } from "@snapstore/core";
 import type { Todo, CompletedTodo, Filter, User } from "../../shared/types";
 
 type TodoOp = "fetch" | "add" | "toggle" | "remove" | "edit" | "clearCompleted";

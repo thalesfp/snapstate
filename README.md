@@ -1,18 +1,18 @@
-# Snapstate
+# Snapstore
 
 > **Alpha.** APIs may change between releases.
 
 State management for React built around class-based stores: testable, extensible, and predictable by default.
 
 ```bash
-npm install @thalesfp/snapstate
+npm install @snapstore/react
 ```
 
-## Why Snapstate
+## Why Snapstore
 
-Snapstate keeps business logic out of React components. Components focus on rendering; stores hold the state, the rules, and the async work. Because stores are plain classes with no React coupling, you can unit test them without rendering anything.
+Snapstore keeps business logic out of React components. Components focus on rendering; stores hold the state, the rules, and the async work. Because stores are plain classes with no React coupling, you can unit test them without rendering anything.
 
-Use Snapstate when:
+Use Snapstore when:
 
 - You want business logic in testable classes instead of `useEffect` chains.
 - Shared state, loading states, and view lifecycle need to stay predictable.
@@ -20,16 +20,18 @@ Use Snapstate when:
 
 Skip it when local component state and a few hooks are enough.
 
-## Entry Points
+## Packages
 
-| Import | What you get | Requires |
+Install only what you need; every package pulls in `@snapstore/core` automatically.
+
+| Package | What you get | Peer deps |
 |---|---|---|
-| `@thalesfp/snapstate` | Core `SnapStore`, `createStore`, types, `setHttpClient` | Nothing |
-| `@thalesfp/snapstate/react` | `SnapStore` with `connect()` and `SnapStore.scoped()` | `react >= 18` |
-| `@thalesfp/snapstate/form` | `SnapFormStore` with Zod validation and submit lifecycle | `react >= 18`, `zod >= 4` |
-| `@thalesfp/snapstate/url` | `createUrlParams`, `syncToUrl` for URL search params | Nothing |
+| `@snapstore/core` | Core `SnapStore`, `createStore`, types, `setHttpClient` | None |
+| `@snapstore/react` | `SnapStore` with `connect()` and `SnapStore.scoped()` | `react >= 18` |
+| `@snapstore/form` | `SnapFormStore` with Zod validation and submit lifecycle | `react >= 18`, `zod >= 4` |
+| `@snapstore/url` | `createUrlParams`, `syncToUrl` for URL search params | None |
 
-React and Zod are optional peer dependencies, needed only for their entry points. `qs` is bundled.
+`@snapstore/react` and `@snapstore/form` need React as a peer dependency; `@snapstore/form` also needs Zod. `@snapstore/url` depends on `qs`, installed automatically.
 
 ## Quick Start
 
@@ -38,8 +40,8 @@ A working feature is three small files: a store that owns the logic, a view that
 **`TodoStore.ts`** holds state, business logic, and the shared instance:
 
 ```ts
-import { SnapStore } from "@thalesfp/snapstate/react";
-import type { StoreOptions } from "@thalesfp/snapstate";
+import { SnapStore } from "@snapstore/react";
+import type { StoreOptions } from "@snapstore/core";
 
 export interface Todo {
   id: string;
@@ -457,7 +459,7 @@ async refreshOrgCount(phaseId: string): Promise<number> {
 
 ## React Integration
 
-Import `SnapStore` from `@thalesfp/snapstate/react` to get `connect()` and `SnapStore.scoped()`.
+Import `SnapStore` from `@snapstore/react` to get `connect()` and `SnapStore.scoped()`.
 
 ### Props mapping
 
@@ -562,7 +564,7 @@ The template renders after the fetch guards, so `children` is always the ready c
 `SnapStore.scoped()` creates the store when the component mounts and destroys it on unmount. **Prefer it whenever the store is used by exactly one component**: detail views, modals, wizards, editors. Each mount gets clean state, and there is nothing to reset or clean up manually.
 
 ```tsx
-import { SnapStore } from "@thalesfp/snapstate/react";
+import { SnapStore } from "@snapstore/react";
 
 class TodoDetailStore extends SnapStore<{ todo: Todo | null }, "fetch"> {
   constructor() {
@@ -587,10 +589,10 @@ const TodoDetail = SnapStore.scoped(TodoDetailView, {
 
 ## Forms
 
-`SnapFormStore<V, K>` extends the React store with Zod validation, DOM binding, and a submit lifecycle. Import from `@thalesfp/snapstate/form`; requires `zod >= 4`.
+`SnapFormStore<V, K>` extends the React store with Zod validation, DOM binding, and a submit lifecycle. Import from `@snapstore/form`; requires `zod >= 4`.
 
 ```ts
-import { SnapFormStore } from "@thalesfp/snapstate/form";
+import { SnapFormStore } from "@snapstore/form";
 import { z } from "zod";
 
 const schema = z.object({
@@ -676,14 +678,14 @@ Two practices worth copying from this example:
 
 ## URL Parameters
 
-`@thalesfp/snapstate/url` reads and writes URL search params reactively.
+`@snapstore/url` reads and writes URL search params reactively.
 
 ### Reading URL params
 
 `createUrlParams<T>()` returns a typed `Subscribable` over `window.location.search`. It reacts to `popstate` and to SPA navigation (it patches `history.pushState`/`replaceState`, which do not fire events natively).
 
 ```ts
-import { createUrlParams } from "@thalesfp/snapstate/url";
+import { createUrlParams } from "@snapstore/url";
 
 export const urlParams = createUrlParams<{ filter?: string; page?: string }>();
 
@@ -716,7 +718,7 @@ this.derive("filter", urlParams, (p) => (typeof p.filter === "string" ? p.filter
 `syncToUrl()` mirrors selected state into the search string on every store change:
 
 ```ts
-import { syncToUrl } from "@thalesfp/snapstate/url";
+import { syncToUrl } from "@snapstore/url";
 
 const unsub = syncToUrl(todoStore, {
   params: { filter: (s) => s.filter, page: (s) => s.page },
@@ -743,7 +745,7 @@ createUrlParams({
 The default client uses native `fetch`, JSON-serializes bodies, throws on non-2xx responses, and extracts `error`/`message` fields from JSON error bodies. Swap it globally with `setHttpClient`:
 
 ```ts
-import { setHttpClient } from "@thalesfp/snapstate";
+import { setHttpClient } from "@snapstore/core";
 
 setHttpClient({
   async request(url, init) {

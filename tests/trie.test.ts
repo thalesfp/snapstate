@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { SubscriptionTrie } from "../src/core/trie.js";
+import { SubscriptionTrie } from "@snapstore/core";
 
 describe("SubscriptionTrie", () => {
   it("notifies exact path listeners", () => {

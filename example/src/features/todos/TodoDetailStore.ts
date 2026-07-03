@@ -1,5 +1,5 @@
-import { SnapStore } from "snapstate/react";
-import type { StoreOptions } from "snapstate";
+import { SnapStore } from "@snapstore/react";
+import type { StoreOptions } from "@snapstore/core";
 import type { Todo, Activity } from "../../shared/types";
 
 interface TodoDetailState {

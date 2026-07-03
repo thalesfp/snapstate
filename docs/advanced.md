@@ -46,10 +46,10 @@ const profileUnderTest = new ProfileStore({
 
 ## Using Without React
 
-The core `@thalesfp/snapstate` export has no React dependency. Stores work anywhere JavaScript runs:
+The core `@snapstore/core` export has no React dependency. Stores work anywhere JavaScript runs:
 
 ```typescript
-import { SnapStore } from "@thalesfp/snapstate";
+import { SnapStore } from "@snapstore/core";
 
 class CounterStore extends SnapStore<{ count: number }> {
   constructor() {
@@ -75,7 +75,7 @@ store.increment(); // state updates immediately; the log arrives after the micro
 When a full class is overkill, `createStore` gives you the same reactive core as a plain object:
 
 ```typescript
-import { createStore } from "@thalesfp/snapstate";
+import { createStore } from "@snapstore/core";
 
 const store = createStore({ count: 0, name: "test" });
 
@@ -100,7 +100,7 @@ import type {
   HttpClient,      // { request<R>(url, init?) => Promise<R> }
   Subscribable,    // { subscribe(cb), getSnapshot() }
   ComputedRef,     // { get(), destroy() }
-} from "@thalesfp/snapstate";
+} from "@snapstore/core";
 ```
 
 ### DotPaths

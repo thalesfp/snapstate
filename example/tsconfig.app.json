@@ -8,10 +8,10 @@
     "types": ["vite/client"],
     "skipLibCheck": true,
     "paths": {
-      "snapstate": ["../dist/index.d.ts"],
-      "snapstate/react": ["../dist/react/index.d.ts"],
-      "snapstate/form": ["../dist/form/index.d.ts"],
-      "snapstate/url": ["../dist/url/index.d.ts"]
+      "@snapstore/core": ["../packages/core/dist/index.d.ts"],
+      "@snapstore/url": ["../packages/url/dist/index.d.ts"],
+      "@snapstore/react": ["../packages/react/dist/index.d.ts"],
+      "@snapstore/form": ["../packages/form/dist/index.d.ts"]
     },
 
     /* Bundler mode */

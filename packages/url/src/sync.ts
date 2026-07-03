@@ -1,6 +1,5 @@
 import qs from "qs";
-import type { Subscribable, Unsubscribe } from "../core/types.js";
-import { shallowEqual } from "../core/shallow-equal.js";
+import { shallowEqual, type Subscribable, type Unsubscribe } from "@snapstore/core";
 
 /** Options for `syncToUrl()`. */
 export interface SyncToUrlOptions<T extends object, P extends Record<string, unknown> = Record<string, unknown>> {

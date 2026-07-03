@@ -14,7 +14,7 @@ vi.mock("../../stores", () => ({
 
 import { TodoItem } from "./TodoItem";
 import { todoStore } from "../../stores";
-import { asyncStatus } from "snapstate/react";
+import { asyncStatus } from "@snapstore/react";
 
 const C = TodoItem as any;
 const todo = { id: "1", text: "Test todo", completed: false };

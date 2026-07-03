@@ -1,38 +1,38 @@
 ---
 title: Getting Started
-description: Install and start using Snapstate for reactive state management in React
+description: Install and start using Snapstore for reactive state management in React
 ---
 
 # Getting Started
 
-Snapstate is a state management library for React built around class-based stores. Stores hold state and business logic; components render. You get typed dot-path access (`"user.name"`), granular subscriptions, structural sharing, and built-in async tracking, all testable without React.
+Snapstore is a state management library for React built around class-based stores. Stores hold state and business logic; components render. You get typed dot-path access (`"user.name"`), granular subscriptions, structural sharing, and built-in async tracking, all testable without React.
 
 ## Installation
 
 ```bash
-npm install @thalesfp/snapstate
+npm install @snapstore/react
 ```
 
-Peer dependencies are optional and only needed for their entry points:
+Every package pulls in `@snapstore/core` automatically. Peer dependencies, per package:
 
-- `react >= 18` for `@thalesfp/snapstate/react` and `/form`
-- `zod >= 4` for `@thalesfp/snapstate/form`
+- `react >= 18` for `@snapstore/react` and `@snapstore/form`
+- `zod >= 4` for `@snapstore/form`
 
-## Entry Points
+## Packages
 
-| Path | Use case |
+| Package | Use case |
 | --- | --- |
-| `@thalesfp/snapstate` | Core store, no React dependency |
-| `@thalesfp/snapstate/react` | React integration: `connect()` and `SnapStore.scoped()` |
-| `@thalesfp/snapstate/form` | Zod-based form stores |
-| `@thalesfp/snapstate/url` | Reactive URL search params |
+| `@snapstore/core` | Core store, no React dependency |
+| `@snapstore/react` | React integration: `connect()` and `SnapStore.scoped()` |
+| `@snapstore/form` | Zod-based form stores |
+| `@snapstore/url` | Reactive URL search params |
 
 ## Quick Example
 
 Define a store with state and methods:
 
 ```typescript
-import { SnapStore } from "@thalesfp/snapstate/react";
+import { SnapStore } from "@snapstore/react";
 
 interface TodoState {
   items: { id: number; title: string; done: boolean }[];

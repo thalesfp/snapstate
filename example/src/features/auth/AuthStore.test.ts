@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { setHttpClient, type HttpClient } from "snapstate/react";
+import { setHttpClient, type HttpClient } from "@snapstore/react";
 import { AuthStore } from "./AuthStore";
 
 const VALID_EMAIL = "demo@example.com";

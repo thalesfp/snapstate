@@ -1,4 +1,4 @@
-import type { OperationState } from "snapstate/react";
+import type { OperationState } from "@snapstore/react";
 import { todoStore, todoInputStore } from "../../stores";
 
 interface TodoInputProps {

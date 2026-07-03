@@ -8,7 +8,7 @@ description: Zod-powered form stores with validation, DOM binding, and async sub
 `SnapFormStore<V, K>` extends the React-enabled `SnapStore` with Zod validation, DOM binding, and a submit lifecycle. Use it whenever the main concern is form values, validation, and submission.
 
 ```typescript
-import { SnapFormStore } from "@thalesfp/snapstate/form";
+import { SnapFormStore } from "@snapstore/form";
 ```
 
 Requires `zod >= 4` as a peer dependency.
@@ -17,7 +17,7 @@ Requires `zod >= 4` as a peer dependency.
 
 ```typescript
 import { z } from "zod";
-import { SnapFormStore } from "@thalesfp/snapstate/form";
+import { SnapFormStore } from "@snapstore/form";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),

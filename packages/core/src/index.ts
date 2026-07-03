@@ -1,6 +1,9 @@
 export { createStore } from "./store.js";
 export { SubscriptionTrie } from "./trie.js";
-export { setHttpClient } from "./base.js";
+export { SnapStore, setHttpClient, setDefaultHeaders } from "./base.js";
+export { asyncStatus } from "./types.js";
+export { storedValue } from "./structural.js";
+export { shallowEqual } from "./shallow-equal.js";
 export type {
   RawStore,
   StoreOptions,
@@ -10,8 +13,12 @@ export type {
   Updater,
   ComputedRef,
   GetByPath,
+  DotPaths,
   DeepPartial,
   OperationState,
+  AsyncStatus,
+  AsyncStatusValue,
+  Subscribable,
   HttpClient,
   HttpRequestInit,
   ApiRequestOptions,

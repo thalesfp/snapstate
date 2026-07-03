@@ -1,5 +1,5 @@
 import qs from "qs";
-import type { Listener, Unsubscribe, Subscribable } from "../core/types.js";
+import type { Listener, Unsubscribe, Subscribable } from "@snapstore/core";
 
 function deepEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);

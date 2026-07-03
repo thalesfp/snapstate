@@ -1,4 +1,4 @@
-import { SnapFormStore } from "snapstate/form";
+import { SnapFormStore } from "@snapstore/form";
 import { z } from "zod";
 import type { User } from "../../shared/types";
 import type { AuthStore } from "./AuthStore";

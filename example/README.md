@@ -1,6 +1,6 @@
-# Snapstate Example
+# Snapstore Example
 
-This example app demonstrates how Snapstate fits together in a small React application with auth, todos, forms, scoped detail views, and URL-backed filters.
+This example app demonstrates how Snapstore fits together in a small React application with auth, todos, forms, scoped detail views, and URL-backed filters.
 
 ## What It Shows
 
@@ -21,7 +21,7 @@ npm run example:install
 npm run example:dev
 ```
 
-The example imports the built library output from `../dist`, so rebuilding the library is the right first step after changing Snapstate itself.
+The example imports the built library output from `../dist`, so rebuilding the library is the right first step after changing Snapstore itself.
 
 ## Test It
 

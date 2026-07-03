@@ -1,20 +1,14 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "lib": ["ES2022", "DOM"],
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "outDir": "dist",
-    "rootDir": "src",
-    "jsx": "react-jsx",
-    "types": ["vitest/globals"]
+    "noEmit": true,
+    "types": ["vitest/globals"],
+    "paths": {
+      "@snapstore/core": ["./packages/core/src/index.ts"],
+      "@snapstore/url": ["./packages/url/src/index.ts"],
+      "@snapstore/react": ["./packages/react/src/index.ts"],
+      "@snapstore/form": ["./packages/form/src/index.ts"]
+    }
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "include": ["tests"]
 }

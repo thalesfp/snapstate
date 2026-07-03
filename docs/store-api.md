@@ -8,8 +8,8 @@ description: Full reference for scalar, array, and public store methods
 Create stores by extending `SnapStore<T, K>`. `T` is the state shape; `K` is a union of async operation keys (omit it or use `never` when there are none). The protected `state` accessor provides all state operations.
 
 ```typescript
-import { SnapStore } from "@thalesfp/snapstate";
-// or from "@thalesfp/snapstate/react" for React integration
+import { SnapStore } from "@snapstore/core";
+// or from "@snapstore/react" for React integration
 
 interface CounterState {
   count: number;

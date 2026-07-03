@@ -4,8 +4,8 @@
 import { describe, it, expect } from "vitest";
 import { render, act as actTL, screen } from "@testing-library/react";
 import { createElement } from "react";
-import { createStore } from "../src/core/store.js";
-import { SnapStore } from "../src/react/index.js";
+import { createStore } from "@snapstore/core";
+import { SnapStore } from "@snapstore/react";
 
 describe("concurrent mode safety", () => {
   it("getSnapshot returns stable reference between renders", () => {

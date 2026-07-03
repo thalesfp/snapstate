@@ -1,4 +1,4 @@
-import type { PickFn } from "snapstate/react";
+import type { PickFn } from "@snapstore/react";
 import { todoStore } from "../../stores";
 import type { Filter } from "../../stores";
 import { FILTER_VALUES } from "../../shared/types";

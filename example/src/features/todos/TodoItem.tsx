@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { Link } from "react-router";
-import type { OperationState } from "snapstate/react";
+import type { OperationState } from "@snapstore/react";
 import { todoStore } from "../../stores";
 import type { Todo } from "../../stores";
 

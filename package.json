@@ -1,39 +1,14 @@
 {
-  "name": "@thalesfp/snapstate",
+  "name": "snapstate",
   "version": "0.11.0",
-  "description": "State management for React - testable, extensible, predictable class-based stores",
+  "private": true,
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    },
-    "./react": {
-      "types": "./dist/react/index.d.ts",
-      "import": "./dist/react/index.js",
-      "require": "./dist/react/index.cjs"
-    },
-    "./form": {
-      "types": "./dist/form/index.d.ts",
-      "import": "./dist/form/index.js",
-      "require": "./dist/form/index.cjs"
-    },
-    "./url": {
-      "types": "./dist/url/index.d.ts",
-      "import": "./dist/url/index.js",
-      "require": "./dist/url/index.cjs"
-    }
-  },
-  "files": [
-    "dist"
+  "description": "State management for React - testable, extensible, predictable class-based stores",
+  "workspaces": [
+    "packages/*"
   ],
   "scripts": {
-    "prepublishOnly": "npm run build && npm test",
-    "build": "tsup",
+    "build": "npm run build -w @snapstore/core -w @snapstore/url -w @snapstore/react -w @snapstore/form",
     "test": "vitest run",
     "test:watch": "vitest",
     "bench": "vitest bench",
@@ -42,18 +17,6 @@
     "example:build": "cd example && npm run build",
     "example:test": "cd example && npm test",
     "example:test:e2e": "cd example && npm run test:e2e"
-  },
-  "peerDependencies": {
-    "react": ">=18.0.0",
-    "zod": ">=4.0.0"
-  },
-  "peerDependenciesMeta": {
-    "react": {
-      "optional": true
-    },
-    "zod": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@testing-library/react": "^16.0.0",
@@ -72,24 +35,11 @@
   "author": "Thales",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/thalesfp/snapstate.git"
+    "url": "git+https://github.com/thalesfp/snapstore.git"
   },
-  "homepage": "https://github.com/thalesfp/snapstate#readme",
+  "homepage": "https://github.com/thalesfp/snapstore#readme",
   "bugs": {
-    "url": "https://github.com/thalesfp/snapstate/issues"
-  },
-  "keywords": [
-    "state",
-    "reactive",
-    "store",
-    "react",
-    "form",
-    "zod",
-    "subscriptions",
-    "path-based"
-  ],
-  "dependencies": {
-    "qs": "^6.15.0"
+    "url": "https://github.com/thalesfp/snapstore/issues"
   },
   "overrides": {
     "esbuild": "^0.28.1"

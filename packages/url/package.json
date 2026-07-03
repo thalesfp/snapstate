@@ -1,0 +1,52 @@
+{
+  "name": "@snapstore/url",
+  "version": "0.11.0",
+  "description": "Reactive URL search-param stores for Snapstore",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "author": "Thales",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thalesfp/snapstore.git",
+    "directory": "packages/url"
+  },
+  "homepage": "https://github.com/thalesfp/snapstore#readme",
+  "bugs": {
+    "url": "https://github.com/thalesfp/snapstore/issues"
+  },
+  "keywords": [
+    "state",
+    "url",
+    "search-params",
+    "reactive"
+  ],
+  "dependencies": {
+    "@snapstore/core": "^0.11.0",
+    "qs": "^6.15.0"
+  }
+}

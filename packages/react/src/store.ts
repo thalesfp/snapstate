@@ -7,12 +7,9 @@ import {
   createElement,
   forwardRef,
 } from "react";
-import { SnapStore } from "../core/base.js";
-import { asyncStatus } from "../core/types.js";
-import type { StoreOptions, AsyncStatus, DotPaths, GetByPath, Subscribable } from "../core/types.js";
-import { shallowEqual } from "../core/shallow-equal.js";
-import type { UrlParams } from "../url/params.js";
-import { parseSearch } from "../url/params.js";
+import { SnapStore, asyncStatus, shallowEqual } from "@snapstore/core";
+import type { StoreOptions, AsyncStatus, DotPaths, GetByPath, Subscribable } from "@snapstore/core";
+import { parseSearch, type UrlParams } from "@snapstore/url";
 
 function getUrlParams(): Record<string, unknown> {
   if (typeof window === "undefined") return {};

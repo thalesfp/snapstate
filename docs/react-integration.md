@@ -5,10 +5,10 @@ description: Connect stores to React components with the connect HOC and scoped 
 
 # React Integration
 
-Import from `@thalesfp/snapstate/react` to get React-aware stores with `connect()` and `SnapStore.scoped()`.
+Import from `@snapstore/react` to get React-aware stores with `connect()` and `SnapStore.scoped()`.
 
 ```typescript
-import { SnapStore } from "@thalesfp/snapstate/react";
+import { SnapStore } from "@snapstore/react";
 ```
 
 ## Which form to use

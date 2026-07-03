@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createUrlParams, syncToUrl } from "../src/url/index.js";
-import { SnapStore } from "../src/core/base.js";
-import type { Subscribable } from "../src/core/types.js";
+import { createUrlParams, syncToUrl } from "@snapstore/url";
+import { SnapStore } from "@snapstore/core";
+import type { Subscribable } from "@snapstore/core";
 
 describe("createUrlParams", () => {
   let originalSearch: string;

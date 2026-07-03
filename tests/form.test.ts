@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { z } from "zod";
-import { SnapFormStore, getObjectSchema, getBaseSchemaType } from "../src/form/form.js";
-import { setHttpClient } from "../src/core/base.js";
-import { asyncStatus } from "../src/core/types.js";
-import type { HttpClient } from "../src/core/types.js";
+import { SnapFormStore, getObjectSchema, getBaseSchemaType } from "@snapstore/form";
+import { setHttpClient } from "@snapstore/core";
+import { asyncStatus } from "@snapstore/core";
+import type { HttpClient } from "@snapstore/core";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),

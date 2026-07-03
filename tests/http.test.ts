@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { SnapStore, setDefaultHeaders, setHttpClient } from "../src/index.js";
-import type { HttpClient } from "../src/index.js";
+import { SnapStore, setDefaultHeaders, setHttpClient } from "@snapstore/core";
+import type { HttpClient } from "@snapstore/core";
 
 const mockFetch = vi.fn();
 

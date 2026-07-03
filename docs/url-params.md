@@ -5,7 +5,7 @@ description: Reactive reading and writing of URL search params
 
 # URL Parameters
 
-`@thalesfp/snapstate/url` treats the URL search string as another reactive data source. Read it with `createUrlParams`, write to it with `syncToUrl`.
+`@snapstore/url` treats the URL search string as another reactive data source. Read it with `createUrlParams`, write to it with `syncToUrl`.
 
 Direction matters: use `createUrlParams` when the URL drives the app (a shareable `?filter=active` link), and `syncToUrl` when the app should keep the URL up to date. Most filter UIs use both.
 
@@ -14,7 +14,7 @@ Direction matters: use `createUrlParams` when the URL drives the app (a shareabl
 Returns a typed `Subscribable` over `window.location.search`. It reacts to `popstate` and to SPA navigation (it patches `history.pushState`/`replaceState` once, globally, because the browser fires no event for those).
 
 ```typescript
-import { createUrlParams } from "@thalesfp/snapstate/url";
+import { createUrlParams } from "@snapstore/url";
 
 export const urlParams = createUrlParams<{ filter?: string; page?: string }>();
 
@@ -58,7 +58,7 @@ class AppStore extends SnapStore<{ filter: string }> {
 Subscribes to a store and mirrors selected state into the search string on every change:
 
 ```typescript
-import { syncToUrl } from "@thalesfp/snapstate/url";
+import { syncToUrl } from "@snapstore/url";
 
 const unsub = syncToUrl(todoStore, {
   params: {

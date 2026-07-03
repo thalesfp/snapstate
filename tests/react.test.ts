@@ -4,8 +4,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, act as actTL, screen } from "@testing-library/react";
 import { createElement, createRef, forwardRef, StrictMode } from "react";
-import { SnapStore } from "../src/react/index.js";
-import type { AsyncStatus } from "../src/react/index.js";
+import { SnapStore } from "@snapstore/react";
+import type { AsyncStatus } from "@snapstore/react";
 
 interface TestState {
   count: number;

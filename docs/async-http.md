@@ -193,7 +193,7 @@ store.resetStatus();            // e.g. when reusing the store for another conte
 Replace the default `fetch`-based client:
 
 ```typescript
-import { setHttpClient } from "@thalesfp/snapstate";
+import { setHttpClient } from "@snapstore/core";
 
 setHttpClient({
   async request(url, init) {
@@ -208,7 +208,7 @@ setHttpClient({
 Merge headers into every request. Per-request headers win. Call `setDefaultHeaders({})` to clear. Works with both the built-in and custom clients.
 
 ```typescript
-import { setDefaultHeaders } from "@thalesfp/snapstate";
+import { setDefaultHeaders } from "@snapstore/core";
 
 setDefaultHeaders({ Authorization: `Bearer ${token}` });
 ```

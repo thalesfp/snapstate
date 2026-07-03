@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createStore } from "../src/core/store.js";
+import { createStore } from "@snapstore/core";
 
 describe("computed", () => {
   it("computes derived value from state", () => {
