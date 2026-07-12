@@ -1367,7 +1367,7 @@ describe("connect deps", () => {
     const store = new TestStore();
     const fetchSpy = vi.fn(async () => {});
 
-    function Display({ count }: { count: number; status: AsyncStatus; error: string | null }) {
+    function Display({ count }: { id: string; count: number; status: AsyncStatus; error: string | null }) {
       return createElement("span", null, count);
     }
 
@@ -1377,11 +1377,11 @@ describe("connect deps", () => {
       deps: (props) => [props.id],
     });
 
-    const { rerender } = render(createElement(Connected, { id: "1" } as any));
+    const { rerender } = render(createElement(Connected, { id: "1" }));
     await actTL(async () => {});
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
-    rerender(createElement(Connected, { id: "2" } as any));
+    rerender(createElement(Connected, { id: "2" }));
     await actTL(async () => {});
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
@@ -1390,7 +1390,7 @@ describe("connect deps", () => {
     const store = new TestStore();
     const fetchSpy = vi.fn(async () => {});
 
-    function Display({ count }: { count: number; status: AsyncStatus; error: string | null }) {
+    function Display({ count }: { id: string; count: number; status: AsyncStatus; error: string | null }) {
       return createElement("span", null, count);
     }
 
@@ -1400,11 +1400,11 @@ describe("connect deps", () => {
       deps: (props) => [props.id],
     });
 
-    const { rerender } = render(createElement(Connected, { id: "1" } as any));
+    const { rerender } = render(createElement(Connected, { id: "1" }));
     await actTL(async () => {});
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
-    rerender(createElement(Connected, { id: "1" } as any));
+    rerender(createElement(Connected, { id: "1" }));
     await actTL(async () => {});
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
@@ -1413,7 +1413,7 @@ describe("connect deps", () => {
     const store = new TestStore();
     const receivedProps: Record<string, unknown>[] = [];
 
-    function Display({ count }: { count: number; status: AsyncStatus; error: string | null }) {
+    function Display({ count }: { id: string; count: number; status: AsyncStatus; error: string | null }) {
       return createElement("span", null, count);
     }
 
@@ -1423,7 +1423,7 @@ describe("connect deps", () => {
       deps: (props) => [props.id],
     });
 
-    render(createElement(Connected, { id: "abc" } as any));
+    render(createElement(Connected, { id: "abc" }));
     await actTL(async () => {});
 
     expect(receivedProps).toHaveLength(1);
@@ -1434,7 +1434,7 @@ describe("connect deps", () => {
     const store = new TestStore();
     const cleanupSpy = vi.fn();
 
-    function Display({ count }: { count: number }) {
+    function Display({ count }: { id: string; count: number }) {
       return createElement("span", null, count);
     }
 
@@ -1445,11 +1445,11 @@ describe("connect deps", () => {
       deps: (props) => [props.id],
     });
 
-    const { rerender } = render(createElement(Connected, { id: "1" } as any));
+    const { rerender } = render(createElement(Connected, { id: "1" }));
     await actTL(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(cleanupSpy).not.toHaveBeenCalled();
 
-    rerender(createElement(Connected, { id: "2" } as any));
+    rerender(createElement(Connected, { id: "2" }));
     await actTL(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(cleanupSpy).toHaveBeenCalledTimes(1);
   });
@@ -1459,7 +1459,7 @@ describe("connect deps", () => {
     const setupProps: Record<string, unknown>[] = [];
     const cleanupProps: Record<string, unknown>[] = [];
 
-    function Display({ count }: { count: number }) {
+    function Display({ count }: { id: string; count: number }) {
       return createElement("span", null, count);
     }
 
@@ -1470,7 +1470,7 @@ describe("connect deps", () => {
       deps: (props) => [props.id],
     });
 
-    const { unmount } = render(createElement(Connected, { id: "1" } as any));
+    const { unmount } = render(createElement(Connected, { id: "1" }));
     await actTL(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
     expect(setupProps).toHaveLength(1);
@@ -1486,7 +1486,7 @@ describe("connect deps", () => {
     const store = new TestStore();
     const cleanupSpy = vi.fn();
 
-    function Display({ count }: { count: number }) {
+    function Display({ count }: { id: string; count: number }) {
       return createElement("span", null, count);
     }
 
@@ -1496,11 +1496,11 @@ describe("connect deps", () => {
       deps: (props) => [props.id],
     });
 
-    const { rerender } = render(createElement(Connected, { id: "1" } as any));
+    const { rerender } = render(createElement(Connected, { id: "1" }));
     await actTL(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(cleanupSpy).not.toHaveBeenCalled();
 
-    rerender(createElement(Connected, { id: "2" } as any));
+    rerender(createElement(Connected, { id: "2" }));
     await actTL(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(cleanupSpy).toHaveBeenCalledTimes(1);
   });
@@ -1509,7 +1509,7 @@ describe("connect deps", () => {
     const store = new TestStore();
     const cleanupSpy = vi.fn();
 
-    function Display({ count }: { count: number }) {
+    function Display({ count }: { id: string; count: number }) {
       return createElement("span", null, count);
     }
 
@@ -1519,7 +1519,7 @@ describe("connect deps", () => {
       deps: (props) => [props.id],
     });
 
-    render(createElement(StrictMode, null, createElement(Connected, { id: "1" } as any)));
+    render(createElement(StrictMode, null, createElement(Connected, { id: "1" })));
     await actTL(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(cleanupSpy).not.toHaveBeenCalled();
   });
@@ -1750,7 +1750,7 @@ describe("scoped", () => {
   it("re-runs fetch when deps change", async () => {
     const fetchSpy = vi.fn(async () => {});
 
-    function Display({ count }: { count: number; status: AsyncStatus; error: string | null }) {
+    function Display({ count }: { id: string; count: number; status: AsyncStatus; error: string | null }) {
       return createElement("span", null, count);
     }
 
@@ -1761,11 +1761,11 @@ describe("scoped", () => {
       deps: (props) => [props.id],
     });
 
-    const { rerender } = render(createElement(Scoped, { id: "1" } as any));
+    const { rerender } = render(createElement(Scoped, { id: "1" }));
     await actTL(async () => {});
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
-    rerender(createElement(Scoped, { id: "2" } as any));
+    rerender(createElement(Scoped, { id: "2" }));
     await actTL(async () => {});
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });

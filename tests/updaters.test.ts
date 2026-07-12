@@ -24,7 +24,7 @@ class TestStore extends SnapStore<TestState, "load"> {
     this.state.prepend(path, ...items);
   }
 
-  doPatch<P extends "nums" | "items">(path: P, predicate: (item: any) => boolean, updates: any) {
+  doPatch(path: "items", predicate: (item: any) => boolean, updates: any) {
     this.state.patch(path, predicate, updates);
   }
 

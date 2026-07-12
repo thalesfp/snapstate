@@ -1,8 +1,29 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { SnapStore, setDefaultHeaders, setHttpClient } from "@snapstore/core";
-import type { HttpClient } from "@snapstore/core";
+import type { ApiAccessor, HttpClient, StateAccessor } from "@snapstore/core";
 
 const mockFetch = vi.fn();
+
+// `state` and `api` are protected on SnapStore, but these tests drive them directly.
+// A derived class may widen visibility, and `declare` keeps the redeclaration type-only
+// so the base constructor still owns the actual assignment.
+class OpenStore<T extends object, K extends string = string> extends SnapStore<T, K> {
+  declare readonly state: StateAccessor<T>;
+  declare readonly api: ApiAccessor<K, T>;
+
+  snapshot() {
+    return this.getSnapshot();
+  }
+}
+
+// Returns an HttpClient alongside the mock backing it, so tests can stub responses and
+// assert on calls without casting the mock into the HttpClient shape.
+const createMockClient = () => {
+  const request = vi.fn();
+  const client: HttpClient = { request: (url, init) => request(url, init) };
+
+  return { client, request };
+};
 
 class TestStore extends SnapStore<{ data: string }, "op"> {
   doGet(url: string) {
@@ -192,18 +213,16 @@ describe("named params", () => {
     items: string[];
   }
 
-  class TargetStore extends SnapStore<TargetState, "op"> {
-    snapshot() {
-      return this.getSnapshot();
-    }
-  }
+  class TargetStore extends OpenStore<TargetState, "op"> {}
 
-  let mockClient: HttpClient;
+  let mockClient: ReturnType<typeof createMockClient>;
   let store: TargetStore;
 
   beforeEach(() => {
-    mockClient = { request: vi.fn().mockResolvedValue("hello") };
-    store = new TargetStore({ name: "", items: [] }, { httpClient: mockClient });
+    mockClient = createMockClient();
+    mockClient.request.mockResolvedValue("hello");
+
+    store = new TargetStore({ name: "", items: [] }, { httpClient: mockClient.client });
   });
 
   it("api.get with target sets state at the given path", async () => {
@@ -214,23 +233,23 @@ describe("named params", () => {
 
   it("api.get with callback works", async () => {
     await store.api.get<string>({ key: "op", url: "/api/name", onSuccess: (d) => {
-      store.state.set("name" as never, d as never);
+      store.state.set("name", d);
     }});
 
     expect(store.snapshot().name).toBe("hello");
   });
 
   it("api.post with target sets state", async () => {
-    (mockClient.request as ReturnType<typeof vi.fn>).mockResolvedValue(["a", "b"]);
+    mockClient.request.mockResolvedValue(["a", "b"]);
     await store.api.post({ key: "op", url: "/api/items", body: { x: 1 }, target: "items" });
 
     expect(store.snapshot().items).toEqual(["a", "b"]);
   });
 
   it("api.post with onSuccess callback works", async () => {
-    (mockClient.request as ReturnType<typeof vi.fn>).mockResolvedValue(["c"]);
+    mockClient.request.mockResolvedValue(["c"]);
     await store.api.post<string[]>({ key: "op", url: "/api/items", body: { x: 1 }, onSuccess: (d) => {
-      store.state.set("items" as never, d as never);
+      store.state.set("items", d);
     }});
 
     expect(store.snapshot().items).toEqual(["c"]);
@@ -245,7 +264,7 @@ describe("named params", () => {
 
   it("api.fetch without key skips status tracking", async () => {
     await store.api.fetch({ fn: async () => {
-      store.state.set("name" as never, "manual" as never);
+      store.state.set("name", "manual");
     }});
 
     expect(store.snapshot().name).toBe("manual");
@@ -265,20 +284,17 @@ describe("api.all", () => {
     stats: { count: number };
   }
 
-  class DashboardStore extends SnapStore<DashboardState, "fetch"> {
-    snapshot() {
-      return this.getSnapshot();
-    }
-  }
+  class DashboardStore extends OpenStore<DashboardState, "fetch"> {}
 
-  let mockClient: { request: ReturnType<typeof vi.fn> };
+  let mockClient: ReturnType<typeof createMockClient>;
   let store: DashboardStore;
 
   beforeEach(() => {
-    mockClient = { request: vi.fn() };
+    mockClient = createMockClient();
+
     store = new DashboardStore(
       { users: [], stats: { count: 0 } },
-      { httpClient: mockClient },
+      { httpClient: mockClient.client },
     );
   });
 
@@ -403,14 +419,15 @@ describe("api.get fallback", () => {
     name: string;
   }
 
-  let mockClient: { request: ReturnType<typeof vi.fn> };
-  let store: SnapStore<State, "op">;
+  let mockClient: ReturnType<typeof createMockClient>;
+  let store: OpenStore<State, "op">;
 
   beforeEach(() => {
-    mockClient = { request: vi.fn() };
-    store = new (class extends SnapStore<State, "op"> {})(
+    mockClient = createMockClient();
+
+    store = new OpenStore<State, "op">(
       { items: [], name: "" },
-      { httpClient: mockClient },
+      { httpClient: mockClient.client },
     );
   });
 
@@ -443,14 +460,15 @@ describe("api.get fallback", () => {
 });
 
 describe("api.fetch returns value", () => {
-  let mockClient: { request: ReturnType<typeof vi.fn> };
-  let store: SnapStore<{ data: string }, "op">;
+  let mockClient: ReturnType<typeof createMockClient>;
+  let store: OpenStore<{ data: string }, "op">;
 
   beforeEach(() => {
-    mockClient = { request: vi.fn() };
-    store = new (class extends SnapStore<{ data: string }, "op"> {})(
+    mockClient = createMockClient();
+
+    store = new OpenStore<{ data: string }, "op">(
       { data: "" },
-      { httpClient: mockClient },
+      { httpClient: mockClient.client },
     );
   });
 
@@ -469,14 +487,15 @@ describe("api.fetch returns value", () => {
 });
 
 describe("onError rethrowing", () => {
-  let mockClient: { request: ReturnType<typeof vi.fn> };
-  let store: SnapStore<{ data: string }, "op">;
+  let mockClient: ReturnType<typeof createMockClient>;
+  let store: OpenStore<{ data: string }, "op">;
 
   beforeEach(() => {
-    mockClient = { request: vi.fn() };
-    store = new (class extends SnapStore<{ data: string }, "op"> {})(
+    mockClient = createMockClient();
+
+    store = new OpenStore<{ data: string }, "op">(
       { data: "" },
-      { httpClient: mockClient },
+      { httpClient: mockClient.client },
     );
   });
 
@@ -520,7 +539,7 @@ describe("setDefaultHeaders with custom client", () => {
     const customClient: HttpClient = { request: vi.fn().mockResolvedValue("ok") };
     setDefaultHeaders({ Authorization: "Bearer token" });
 
-    const store = new (class extends SnapStore<{ data: string }, "op"> {})(
+    const store = new OpenStore<{ data: string }, "op">(
       { data: "" },
       { httpClient: customClient },
     );
@@ -536,7 +555,7 @@ describe("setDefaultHeaders with custom client", () => {
     const customClient: HttpClient = { request: vi.fn().mockResolvedValue("ok") };
     setDefaultHeaders({ Authorization: "Bearer default" });
 
-    const store = new (class extends SnapStore<{ data: string }, "op"> {})(
+    const store = new OpenStore<{ data: string }, "op">(
       { data: "" },
       { httpClient: customClient },
     );
@@ -555,11 +574,7 @@ describe("take-latest guards state mutations", () => {
     items: string[];
   }
 
-  class RaceStore extends SnapStore<State, "op"> {
-    snapshot() {
-      return this.getSnapshot();
-    }
-  }
+  class RaceStore extends OpenStore<State, "op"> {}
 
   it("stale api.get with target does not overwrite state", async () => {
     let resolveOld!: (v: unknown) => void;

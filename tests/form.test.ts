@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { z } from "zod";
 import { SnapFormStore, getObjectSchema, getBaseSchemaType } from "@snapstore/form";
+import type { FormState } from "@snapstore/form";
 import { setHttpClient } from "@snapstore/core";
 import { asyncStatus } from "@snapstore/core";
-import type { HttpClient } from "@snapstore/core";
+import type { HttpClient, StateAccessor } from "@snapstore/core";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -12,7 +13,11 @@ const schema = z.object({
 
 type Values = z.infer<typeof schema>;
 
-class TestForm extends SnapFormStore<Values, "save"> {}
+// `state` is protected on SnapStore; widen it to public so these tests can read form
+// internals directly. `declare` is type-only, so the base constructor still assigns it.
+class TestForm extends SnapFormStore<Values, "save"> {
+  declare readonly state: StateAccessor<FormState<Values>>;
+}
 
 describe("getObjectSchema", () => {
   it("returns ZodObject directly", () => {
@@ -307,7 +312,7 @@ describe("SnapFormStore", () => {
     });
 
     it("produces {} for object fields", () => {
-      const objSchema = z.object({ meta: z.record(z.unknown()) });
+      const objSchema = z.object({ meta: z.record(z.string(), z.unknown()) });
       type ObjValues = { meta: Record<string, unknown> };
       const objForm = new SnapFormStore<ObjValues>(objSchema, { meta: { foo: 1 } });
       objForm.clear();
@@ -954,7 +959,7 @@ describe("SnapFormStore", () => {
     });
 
     it("clears nullable record to empty object", () => {
-      const s = z.object({ meta: z.record(z.unknown()).nullable() });
+      const s = z.object({ meta: z.record(z.string(), z.unknown()).nullable() });
       type V = z.infer<typeof s>;
       const f = new SnapFormStore<V>(s, { meta: null });
       f.clear();
