@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "build": "npm run build -w @snapstore/core -w @snapstore/url -w @snapstore/react -w @snapstore/form",
+    "typecheck": "npm run typecheck --workspaces && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "bench": "vitest bench",

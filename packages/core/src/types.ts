@@ -268,12 +268,12 @@ export interface ApiAccessor<K extends string, T extends object = object> {
    * Pass `fallback` to set the target to a default value on error (suppresses the error).
    * @example await this.api.get({ url: "/api/todos", target: "todos", fallback: [] })
    */
-  get<P extends DotPaths<T>>(params: { key?: K; url: string; target: P; fallback?: GetByPath<T, P>; onError?: (error: Error) => void }): Promise<void>;
+  get<P extends DotPaths<T>>(params: { key?: K; url: string; target: P; fallback?: GetByPath<T, P>; headers?: Record<string, string>; onError?: (error: Error) => void }): Promise<void>;
   /**
    * Perform a GET request with a callback.
    * @example await this.api.get({ key: "fetch", url: "/api/todos", onSuccess: (data) => ... })
    */
-  get<R = unknown>(params: { key?: K; url: string; onSuccess?: (data: R) => void; onError?: (error: Error) => void }): Promise<void>;
+  get<R = unknown>(params: { key?: K; url: string; onSuccess?: (data: R) => void; headers?: Record<string, string>; onError?: (error: Error) => void }): Promise<void>;
   /** @example await this.api.post({ url: "/api/todos", body: { title: "New" }, target: "currentTodo" }) */
   post<P extends DotPaths<T>>(params: ApiTargetParams<K, P>): Promise<void>;
   /** @example await this.api.post({ key: "create", url: "/api/todos", body: { title: "New" } }) */
